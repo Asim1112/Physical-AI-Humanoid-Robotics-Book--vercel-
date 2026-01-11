@@ -10,10 +10,10 @@ Interactive educational resource for Physical AI and Humanoid Robotics with RAG-
 
 ## 🚀 Live Demo
 
-- **Frontend (Vercel):** https://physical-ai-humanoid-robotics-book-lilac-six.vercel.app/
+- **Frontend (Vercel):** https://physical-ai-humanoid-robotics-book-azure-nine.vercel.app/
 - **Backend API (Hugging Face):** https://asim1112-humanoid-robotics-hackathon.hf.space/
 - **API Documentation:** https://asim1112-humanoid-robotics-hackathon.hf.space/docs
-- **Repository:** https://github.com/Asim1112/Physical-AI-Humanoid-Robotics-Book.git
+- **Repository:** https://github.com/Asim1112/Physical-AI-Humanoid-Robotics-Book--vercel-.git
 
 ## 📚 Overview
 
@@ -30,7 +30,7 @@ This project provides an interactive learning platform for Physical AI and Human
 
 ### Try the Chat Interface
 
-1. Visit https://physical-ai-humanoid-robotics-book-lilac-six.vercel.app/
+1. Visit https://physical-ai-humanoid-robotics-book-azure-nine.vercel.app/
 2. Click the green chat button (💬) in the bottom-right corner
 3. Ask a question: "What is Gazebo simulation?" or "Explain ROS 2 nodes"
 4. **Selected-text mode**: Highlight any text → Ask "Explain this in simpler terms"
@@ -264,7 +264,7 @@ Use the interactive Swagger UI at http://localhost:8000/docs to test all endpoin
 ### Frontend (Vercel)
 
 Deployed automatically via Vercel:
-- **Live URL:** https://physical-ai-humanoid-robotics-book-lilac-six.vercel.app/
+- **Live URL:** https://physical-ai-humanoid-robotics-book-azure-nine.vercel.app/
 - Pushes to `main` branch trigger automatic deployment
 
 ### Backend (Hugging Face Spaces)
@@ -367,7 +367,7 @@ MIT License - see LICENSE file for details
 
 ## Contributing
 
-1. Fork the repository: https://github.com/Asim1112/Physical-AI-Humanoid-Robotics-Book.git
+1. Fork the repository: https://github.com/Asim1112/Physical-AI-Humanoid-Robotics-Book--vercel-.git
 2. Create a feature branch
 3. Make changes with clear commit messages
 4. Submit a pull request

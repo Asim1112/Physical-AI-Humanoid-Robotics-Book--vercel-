@@ -10,7 +10,7 @@
 
 ### 1. Show the Homepage (30 seconds)
 
-**Navigate to:** https://physical-ai-humanoid-robotics-book-lilac-six.vercel.app/
+**Navigate to:** https://physical-ai-humanoid-robotics-book-azure-nine.vercel.app/
 
 **Say:** "This is a Docusaurus-based textbook covering Physical AI and Humanoid Robotics. What makes it special is the intelligent chat interface powered by RAG technology."
 
@@ -251,6 +251,6 @@ Prepare screenshots of:
 
 ---
 
-**Demo URL:** https://physical-ai-humanoid-robotics-book-lilac-six.vercel.app/
+**Demo URL:** https://physical-ai-humanoid-robotics-book-azure-nine.vercel.app/
 **API Docs:** https://asim1112-humanoid-robotics-hackathon.hf.space/docs
-**Repository:** https://github.com/Asim1112/Physical-AI-Humanoid-Robotics-Book.git
+**Repository:** https://github.com/Asim1112/Physical-AI-Humanoid-Robotics-Book--vercel-.git
