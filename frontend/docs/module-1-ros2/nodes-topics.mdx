@@ -1,0 +1,581 @@
+---
+title: "Nodes and Topics"
+description: "Learn about ROS 2 nodes and the publish-subscribe communication pattern using topics"
+tags: [ros2, nodes, topics, communication, publish-subscribe]
+sidebar_label: "Nodes and Topics"
+sidebar_position: 3
+keywords: [ros2, nodes, topics, publish-subscribe, communication]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# Nodes and Topics
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+In this chapter, we'll dive deep into the fundamental communication pattern in ROS 2: nodes and topics. This publish-subscribe model is the backbone of most robotic systems and is essential for understanding how different components of a humanoid robot communicate with each other.
+
+The node-topic pattern enables asynchronous, decoupled communication between different parts of your robot. This chapter will cover how to create nodes, define topics, publish and subscribe to messages, and understand the quality of service (QoS) settings that affect communication reliability.
+
+### Learning Objectives
+
+- Understand the node-topic communication pattern in ROS 2
+- Create nodes that publish data to topics
+- Create nodes that subscribe to topics and process messages
+- Configure Quality of Service (QoS) settings for different communication needs
+- Design effective topic naming conventions for humanoid robotics
+- Debug common issues with node-topic communication
+
+### Prerequisites
+
+- Understanding of basic ROS 2 concepts from the previous chapter
+- Basic Python programming knowledge
+- Completed the Lab Setup section
+
+## Deep Explanation
+
+### Node-Topic Architecture
+
+The node-topic architecture in ROS 2 implements the publish-subscribe pattern, which is ideal for streaming data between components. In this pattern:
+
+- **Publishers** send messages to topics without knowing who will receive them
+- **Subscribers** receive messages from topics without knowing who sent them
+- **Topics** serve as named buses that connect publishers and subscribers
+
+For humanoid robots, this pattern is perfect for continuous data streams like:
+- Sensor data (camera images, LiDAR scans, IMU readings)
+- Joint state information
+- Robot pose estimates
+- Path planning updates
+
+### Quality of Service (QoS) Settings
+
+ROS 2 provides Quality of Service (QoS) settings that allow you to tune communication behavior for different requirements. Key QoS settings include:
+
+- **Reliability**: Whether messages must be delivered (RELIABLE) or can be dropped (BEST_EFFORT)
+- **Durability**: Whether late-joining subscribers get old messages (TRANSIENT_LOCAL) or only new ones (VOLATILE)
+- **History**: How many messages to keep in the queue (KEEP_ALL or KEEP_LAST with a specific depth)
+- **Deadline**: Maximum time between messages before considering the publisher dead
+
+For humanoid robots, you'll often use:
+- BEST_EFFORT for sensor data where occasional dropped messages are acceptable
+- RELIABLE for critical control commands
+- KEEP_LAST with small depth for real-time control data
+- KEEP_ALL for logging and debugging
+
+### Topic Naming Conventions
+
+ROS 2 uses a hierarchical namespace for topics. For humanoid robotics, we recommend these conventions:
+
+- Use descriptive names: `/head_camera/image_raw` instead of `/img`
+- Group related topics: `/left_arm/joint_states`, `/right_arm/joint_states`
+- Use underscores for multi-word topics: `/robot_status`, not `/robotstatus`
+- Prefix with robot name for multi-robot systems: `/robot1/joint_states`, `/robot2/joint_states`
+
+### Message Types
+
+Messages in ROS 2 have standardized types defined in `.msg` files. Common message types for humanoid robotics include:
+
+- `std_msgs`: Basic types (Int32, Float64, String, etc.)
+- `sensor_msgs`: Sensor data (Image, JointState, Imu, LaserScan)
+- `geometry_msgs`: Geometric data (Pose, Twist, Vector3, Point)
+- `nav_msgs`: Navigation data (Odometry, Path, OccupancyGrid)
+- Custom message types for specific robot applications
+
+## Practical Examples
+
+### Example 1: Basic Publisher-Subscriber Pair
+
+<Tabs>
+<TabItem value="publisher" label="Publisher Code" default>
+
+```python
+#!/usr/bin/env python3
+# Example: Basic publisher for humanoid robot joint states
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Header
+import math
+import time
+
+
+class JointStatePublisher(Node):
+    """
+    A publisher node that simulates joint state data for a humanoid robot.
+    This demonstrates basic topic publishing with QoS configuration.
+    """
+
+    def __init__(self):
+        super().__init__('joint_state_publisher')
+
+        # Create publisher with QoS settings
+        self.publisher = self.create_publisher(
+            JointState,
+            '/joint_states',
+            10  # Queue size
+        )
+
+        # Timer to publish joint states at 50Hz
+        self.timer = self.create_timer(0.02, self.publish_joint_states)
+
+        # Simulate joint positions
+        self.time_offset = time.time()
+
+        self.get_logger().info('Joint State Publisher node initialized')
+
+    def publish_joint_states(self):
+        """Publish simulated joint state data."""
+        msg = JointState()
+        msg.header = Header()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'base_link'
+
+        # Define joint names for a simple humanoid (6 DOF example)
+        msg.name = [
+            'left_hip_joint', 'left_knee_joint', 'left_ankle_joint',
+            'right_hip_joint', 'right_knee_joint', 'right_ankle_joint'
+        ]
+
+        # Calculate positions with simple oscillating pattern
+        t = time.time() - self.time_offset
+        positions = [
+            0.2 * math.sin(t * 0.5),    # left_hip_joint
+            0.1 * math.sin(t * 0.7),    # left_knee_joint
+            0.15 * math.sin(t * 0.3),   # left_ankle_joint
+            0.2 * math.sin(t * 0.5),    # right_hip_joint
+            0.1 * math.sin(t * 0.7),    # right_knee_joint
+            0.15 * math.sin(t * 0.3)    # right_ankle_joint
+        ]
+
+        msg.position = positions
+
+        # Set velocities and efforts to zero for this example
+        msg.velocity = [0.0] * len(positions)
+        msg.effort = [0.0] * len(positions)
+
+        self.publisher.publish(msg)
+        self.get_logger().debug(f'Published joint states: {positions}')
+
+
+def main(args=None):
+    """Main function to run the joint state publisher node."""
+    rclpy.init(args=args)
+
+    publisher = JointStatePublisher()
+
+    try:
+        rclpy.spin(publisher)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        publisher.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="subscriber" label="Subscriber Code">
+
+```python
+#!/usr/bin/env python3
+# Example: Basic subscriber for humanoid robot joint states
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState
+
+
+class JointStateSubscriber(Node):
+    """
+    A subscriber node that receives and processes joint state data.
+    This demonstrates basic topic subscription and message processing.
+    """
+
+    def __init__(self):
+        super().__init__('joint_state_subscriber')
+
+        # Create subscriber with default QoS
+        self.subscription = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10  # Queue size
+        )
+
+        self.get_logger().info('Joint State Subscriber node initialized')
+
+    def joint_state_callback(self, msg):
+        """Process incoming joint state messages."""
+        # Log basic information about the received joint states
+        self.get_logger().info(
+            f'Received {len(msg.name)} joint states: {msg.name[:3]}...'  # Show first 3 names
+        )
+
+        # Process each joint state
+        for i, (name, pos) in enumerate(zip(msg.name, msg.position)):
+            # Simple safety check - if position is too extreme, log a warning
+            if abs(pos) > 2.0:  # Assuming radians, 2.0 is a reasonable limit
+                self.get_logger().warn(f'Joint {name} has extreme position: {pos:.3f}')
+
+        # Calculate and log average position
+        if msg.position:
+            avg_pos = sum(msg.position) / len(msg.position)
+            self.get_logger().info(f'Average joint position: {avg_pos:.3f}')
+
+
+def main(args=None):
+    """Main function to run the joint state subscriber node."""
+    rclpy.init(args=args)
+
+    subscriber = JointStateSubscriber()
+
+    try:
+        rclpy.spin(subscriber)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        subscriber.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="explanation" label="Explanation">
+
+**Publisher Explanation:**
+- Creates a publisher for the `/joint_states` topic with JointState message type
+- Uses a timer to publish at 50Hz (every 20ms) for real-time control
+- Simulates joint positions with oscillating patterns
+- Properly sets header information including timestamp
+- Includes position, velocity, and effort data as required by JointState message
+
+**Subscriber Explanation:**
+- Creates a subscriber for the `/joint_states` topic
+- Processes joint names and positions from received messages
+- Includes safety checks for extreme joint positions
+- Calculates and logs average joint position for monitoring
+
+**Expected:**
+- Publisher continuously sends joint state messages at 50Hz
+- Subscriber receives and processes messages in real-time
+- Both nodes can run independently and communicate via ROS 2
+
+</TabItem>
+</Tabs>
+
+### Example 2: Multiple Publishers and Subscribers
+
+<Tabs>
+<TabItem value="multi_publisher" label="Multi-Publisher Code">
+
+```python
+#!/usr/bin/env python3
+# Example: Multiple publishers for different humanoid robot sensors
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState, Imu, Image
+from std_msgs.msg import Header, String
+import math
+import time
+import numpy as np
+
+
+class MultiSensorPublisher(Node):
+    """
+    A publisher node that simulates multiple sensor streams for a humanoid robot.
+    Demonstrates publishing to multiple topics from a single node.
+    """
+
+    def __init__(self):
+        super().__init__('multi_sensor_publisher')
+
+        # Create publishers for different sensor types
+        self.joint_pub = self.create_publisher(JointState, '/joint_states', 10)
+        self.imu_pub = self.create_publisher(Imu, '/imu/data', 10)
+        self.status_pub = self.create_publisher(String, '/robot_status', 10)
+
+        # Timers for different sensor update rates
+        self.joint_timer = self.create_timer(0.02, self.publish_joint_states)  # 50Hz
+        self.imu_timer = self.create_timer(0.01, self.publish_imu_data)       # 100Hz
+        self.status_timer = self.create_timer(1.0, self.publish_status)       # 1Hz
+
+        self.time_offset = time.time()
+
+        self.get_logger().info('Multi-Sensor Publisher node initialized')
+
+    def publish_joint_states(self):
+        """Publish simulated joint state data."""
+        msg = JointState()
+        msg.header = Header()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'base_link'
+
+        msg.name = ['hip_joint', 'knee_joint', 'ankle_joint']
+
+        t = time.time() - self.time_offset
+        positions = [
+            0.1 * math.sin(t * 0.5),
+            0.05 * math.sin(t * 0.7),
+            0.08 * math.sin(t * 0.3)
+        ]
+
+        msg.position = positions
+        msg.velocity = [0.0] * len(positions)
+        msg.effort = [0.0] * len(positions)
+
+        self.joint_pub.publish(msg)
+
+    def publish_imu_data(self):
+        """Publish simulated IMU data."""
+        msg = Imu()
+        msg.header = Header()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'imu_link'
+
+        t = time.time() - self.time_offset
+
+        # Simulate orientation (using simple oscillation)
+        msg.orientation.x = 0.0
+        msg.orientation.y = 0.1 * math.sin(t * 0.2)
+        msg.orientation.z = 0.05 * math.sin(t * 0.1)
+        msg.orientation.w = math.sqrt(1 -
+            msg.orientation.x**2 -
+            msg.orientation.y**2 -
+            msg.orientation.z**2)
+
+        # Simulate angular velocity
+        msg.angular_velocity.x = 0.05 * math.cos(t * 0.2)
+        msg.angular_velocity.y = 0.02 * math.cos(t * 0.1)
+        msg.angular_velocity.z = 0.01 * math.cos(t * 0.3)
+
+        # Simulate linear acceleration
+        msg.linear_acceleration.x = 0.5 * math.sin(t * 0.3)
+        msg.linear_acceleration.y = 0.2 * math.sin(t * 0.4)
+        msg.linear_acceleration.z = 9.81 + 0.1 * math.sin(t * 0.5)  # Gravity + small variation
+
+        self.imu_pub.publish(msg)
+
+    def publish_status(self):
+        """Publish robot status."""
+        msg = String()
+        t = time.time() - self.time_offset
+        msg.data = f'Nominal operation - time: {t:.2f}s'
+        self.status_pub.publish(msg)
+
+
+def main(args=None):
+    """Main function to run the multi-sensor publisher node."""
+    rclpy.init(args=args)
+
+    publisher = MultiSensorPublisher()
+
+    try:
+        rclpy.spin(publisher)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        publisher.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="multi_subscriber" label="Multi-Subscriber Code">
+
+```python
+#!/usr/bin/env python3
+# Example: Multi-topic subscriber that listens to multiple robot data streams
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState, Imu
+from std_msgs.msg import String
+
+
+class MultiTopicSubscriber(Node):
+    """
+    A subscriber node that receives data from multiple topics.
+    Demonstrates handling multiple subscriptions in a single node.
+    """
+
+    def __init__(self):
+        super().__init__('multi_topic_subscriber')
+
+        # Create subscribers for different topics
+        self.joint_sub = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10
+        )
+
+        self.imu_sub = self.create_subscription(
+            Imu,
+            '/imu/data',
+            self.imu_callback,
+            10
+        )
+
+        self.status_sub = self.create_subscription(
+            String,
+            '/robot_status',
+            self.status_callback,
+            10
+        )
+
+        # Store latest values for correlation
+        self.latest_joint_positions = []
+        self.latest_orientation = None
+
+        self.get_logger().info('Multi-Topic Subscriber node initialized')
+
+    def joint_state_callback(self, msg):
+        """Process joint state messages."""
+        self.latest_joint_positions = msg.position
+        avg_pos = sum(msg.position) / len(msg.position) if msg.position else 0.0
+
+        self.get_logger().info(
+            f'Joint states - Avg pos: {avg_pos:.3f}, Count: {len(msg.name)}'
+        )
+
+    def imu_callback(self, msg):
+        """Process IMU messages."""
+        # Extract orientation information
+        self.latest_orientation = {
+            'x': msg.orientation.x,
+            'y': msg.orientation.y,
+            'z': msg.orientation.z,
+            'w': msg.orientation.w
+        }
+
+        # Calculate roll, pitch, yaw approximation
+        pitch = math.asin(2 * (msg.orientation.w * msg.orientation.y -
+                              msg.orientation.z * msg.orientation.x))
+
+        self.get_logger().info(
+            f'IMU - Pitch: {math.degrees(pitch):.2f}°, '
+            f'Linear Z: {msg.linear_acceleration.z:.2f}'
+        )
+
+    def status_callback(self, msg):
+        """Process status messages."""
+        self.get_logger().info(f'Status: {msg.data}')
+
+
+def main(args=None):
+    """Main function to run the multi-topic subscriber node."""
+    rclpy.init(args=args)
+
+    subscriber = MultiTopicSubscriber()
+
+    try:
+        rclpy.spin(subscriber)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        subscriber.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+</Tabs>
+
+## Exercises and Checkpoints
+
+### Exercise 1: Topic Design for Humanoid Robot
+
+**Scenario:** You're designing a humanoid robot with the following subsystems:
+- Head with camera and pan/tilt mechanism
+- Two arms with 7 DOF each
+- Two legs with 6 DOF each
+- IMU for balance
+- Force/torque sensors in feet
+
+**Task:** Design a topic naming scheme that follows ROS 2 conventions and makes the system easy to understand and maintain.
+
+**Success Criteria:**
+- [ ] All topics follow consistent naming conventions
+- [ ] Related topics are grouped logically
+- [ ] Names are descriptive and unambiguous
+- [ ] Consider QoS requirements for different topics
+
+### Exercise 2: Practical Implementation
+
+**Objective:** Create a publisher-subscriber pair that simulates a humanoid robot's head pan-tilt system.
+
+**Steps:**
+1. Create a publisher that publishes head joint positions to `/head_controller/joint_states`
+2. Create a subscriber that listens to these positions and logs them
+3. Add a safety check that prevents extreme head movements (>30 degrees)
+4. Test both nodes can communicate properly
+
+**Expected Outcome:** Working publisher-subscriber pair with safety validation.
+
+### Self-Assessment Questions
+
+1. **Question:** What is the main advantage of the publish-subscribe pattern over direct function calls in robotic systems?
+   **Answer:** Decoupling - publishers don't need to know who subscribes to their data, and subscribers don't need to know who publishes the data they receive. This enables modular, flexible system design.
+
+2. **Question:** When would you use BEST_EFFORT vs RELIABLE QoS for a topic?
+   **Answer:** Use BEST_EFFORT for sensor data where occasional dropped messages are acceptable (e.g., camera images), and RELIABLE for critical control commands where every message must be delivered.
+
+3. **Question:** What's the difference between KEEP_ALL and KEEP_LAST in QoS history policy?
+   **Answer:** KEEP_ALL stores all messages in the queue (limited by memory), while KEEP_LAST stores only the last N messages (where N is specified).
+
+## Summary and Key Takeaways
+
+### Key Concepts Recap
+
+- **Publish-Subscribe Pattern**: Asynchronous communication between nodes through named topics
+- **Quality of Service (QoS)**: Settings that control message delivery behavior (reliability, durability, history, deadline)
+- **Topic Naming**: Hierarchical naming scheme that groups related functionality
+- **Message Types**: Standardized formats for data exchange between nodes
+- **Node Independence**: Publishers and subscribers can run independently without direct coupling
+
+### Practical Applications
+
+- **Sensor Data**: Camera images, LiDAR scans, IMU readings using appropriate QoS
+- **Control Systems**: Joint commands, velocity commands, pose references
+- **Monitoring**: Robot status, diagnostic information, system health
+- **Coordination**: Path planning updates, task status, system events
+
+### Next Steps
+
+- **Module Progression:** Next chapter covers [Services and Actions](./services-actions.mdx) for synchronous communication
+- **Further Reading:** Explore advanced QoS configurations and their impact on system performance
+- **Practice Opportunities:** Create more complex publisher-subscriber pairs for different robot subsystems
+
+### Common Mistakes and Troubleshooting
+
+- **Mistake 1:** Using inappropriate QoS settings for the application → **Solution:** Match QoS to requirements (BEST_EFFORT for sensor data, RELIABLE for control)
+- **Mistake 2:** Not considering message frequency → **Solution:** Match publication rate to application needs (e.g., 100Hz for control, 30Hz for video)
+- **Mistake 3:** Poor topic naming → **Solution:** Use descriptive, consistent names that group related functionality
+
+### References and Resources
+
+- [ROS 2 Topics and Services Guide](https://docs.ros.org/en/humble/Tutorials/Topics/Topics.html)
+- [Quality of Service in ROS 2](https://docs.ros.org/en/humble/Concepts/About-Quality-of-Service-Settings.html)
+- [sensor_msgs Package Documentation](https://docs.ros2.org/latest/api/sensor_msgs/)
+- [ROS 2 Message Types](https://docs.ros.org/en/humble/Concepts/About-ROS-Interfaces.html)

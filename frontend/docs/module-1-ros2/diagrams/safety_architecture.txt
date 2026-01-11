@@ -1,0 +1,286 @@
+# Safety Architecture for Humanoid Robots
+
+## Multi-Layer Safety System
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    HUMANOID ROBOT SAFETY ARCHITECTURE                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  LAYER 5: HUMAN INTERFACE SAFETY                                           │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Emergency stop buttons (physical & software)                       ││
+│  │  • Safe operation zones & boundaries                                   ││
+│  │  • User authentication & authorization                                 ││
+│  │  • Collision avoidance with humans                                     ││
+│  │  • Audible/visual warnings                                             ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  LAYER 4: APPLICATION SAFETY                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Behavior validation & feasibility checking                         ││
+│  │  • Motion planning safety constraints                                ││
+│  │  • Multi-sensor safety fusion                                          ││
+│  │  • Safe trajectory generation                                          ││
+│  │  • Emergency behavior activation                                       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  LAYER 3: COMMUNICATION SAFETY                                             │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Message timeout detection                                           ││
+│  │  • Communication heartbeat monitoring                                  ││
+│  │  • Redundant communication paths                                       ││
+│  │  • Safe state publishing when disconnected                             ││
+│  │  • Quality of Service (QoS) for critical messages                      ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  LAYER 2: NODE & CONTROL SAFETY                                            │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Joint position/velocity/effort limits                               ││
+│  │  • Collision detection & avoidance                                     ││
+│  │  • Balance monitoring & recovery                                       ││
+│  │  • Safe position recovery                                              ││
+│  │  • Control loop watchdogs                                              ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  LAYER 1: FIRMWARE & HARDWARE SAFETY                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Motor current/voltage limits                                        ││
+│  │  • Temperature monitoring & thermal protection                         ││
+│  │  • Hardware-based position limits                                      ││
+│  │  • Emergency stop circuits                                             ││
+│  │  • Real-time control constraints                                       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Safety Monitoring and Response System
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   SAFETY MONITORING & RESPONSE                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Continuous Monitoring:                                                     │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Joint States  │  │     IMU &       │  │   Collision     │            │
+│  │   (Positions,   │  │   Balance       │  │   Detection     │            │
+│  │   Velocities,   │  │   (Tilt,        │  │   (Environment  │            │
+│  │   Efforts)      │  │   Acceleration) │  │   & Self)       │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│         │                       │                       │                  │
+│         ▼                       ▼                       ▼                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │  Limit Check    │  │  Balance Check  │  │  Collision      │            │
+│  │  (Hardware &    │  │  (Stability,    │  │  Check          │            │
+│  │  Software)      │  │  Uprightness)   │  │  (Proximity,    │            │
+│  │                 │  │                 │  │  Contact)        │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│         │                       │                       │                  │
+│         └───────────────────────┼───────────────────────┘                  │
+│                                 ▼                                          │
+│  Safety Decision Engine:                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Risk Assessment (Low/Medium/High/Critical)                         ││
+│  │  • Safety State Determination (Normal/Safe Mode/Emergency Stop)       ││
+│  │  • Response Priority Calculation                                       ││
+│  │  • Graceful Degradation Planning                                       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                 │                                          │
+│                                 ▼                                          │
+│  Response Actions:                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Warning       │  │   Safe Motion   │  │   Emergency     │            │
+│  │   (Visual,      │  │   (Reduce Speed,│  │   Stop (Power   │            │
+│  │   Audible)      │  │   Change Gait)  │  │   Cut, Brakes)  │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Safety State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SAFETY STATE MACHINE                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   NORMAL        │  │   SAFE MODE     │  │ EMERGENCY STOP  │            │
+│  │   OPERATION     │  │   (Reduced      │  │   (Complete     │            │
+│  │                 │  │   Functionality) │  │   Shutdown)     │            │
+│  │ • All systems   │  │ • Limited       │  │ • Power cut to  │            │
+│  │   active        │  │   mobility      │  │   all motors    │            │
+│  │ • Full motion   │  │ • Monitoring    │  │ • Brakes engaged│            │
+│  │   capability    │  │   only          │  │ • Wait for      │            │
+│  │ • Normal        │  │ • Reduced       │  │   reset         │            │
+│  │   performance   │  │   speed         │  └─────────────────┘            │
+│  └─────────────────┘  │ • Safety focus  │         ▲                       │
+│         │              │                 │         │                       │
+│         ▼              └─────────────────┘         │                       │
+│  ┌─────────────────┐         │                      │                       │
+│  │   DEGRADED      │         ▼                      │                       │
+│  │   OPERATION     │  ┌─────────────────┐           │                       │
+│  │                 │  │  CALIBRATION    │           │                       │
+│  │ • Partial       │  │   MODE          │           │                       │
+│  │   functionality │  │                 │           │                       │
+│  │ • Safety        │  │ • Self-test     │───────────┘                       │
+│  │   prioritized   │  │ • Calibration   │           ▲                       │
+│  │ • Reduced       │  │ • Limited       │           │                       │
+│  │   performance   │  │   operation     │           │                       │
+│  └─────────────────┘  └─────────────────┘           │                       │
+│         │                      │                     │                       │
+│         └──────────────────────┼─────────────────────┼───────────────────────┘
+│                                ▼                     ▼
+│  Transition Triggers:        ┌─────────────────┐ ┌─────────────────┐
+│  • Normal → Safe:           │  MAINTENANCE    │ │  SHUTDOWN       │
+│    - Minor balance issue    │   MODE          │ │   SEQUENCE      │
+│    - Joint near limit       │                 │ │                 │
+│  • Safe → Normal:           │ • Limited       │ │ • Safe position │
+│    - Conditions improve     │   operation     │ │ • Power down    │
+│  • Any → Emergency:         │ • Diagnostic    │ │ • System        │
+│    - Critical safety issue  │ • Maintenance   │ │   shutdown      │
+│    - Human emergency stop   │   tasks         │ └─────────────────┘
+│  • Any → Calibration:       └─────────────────┘
+│    - Calibration requested
+│    - Specific conditions met
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Hardware Safety Circuits
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    HARDWARE SAFETY IMPLEMENTATION                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Power Distribution with Safety:                                            │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  Main Power Source                                                      ││
+│  │      │                                                                ││
+│  │      ▼                                                                ││
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      ││
+│  │  │   Main Fuse     │  │   Emergency     │  │   Power         │      ││
+│  │  │   & Protection  │  │   Stop Circuit  │  │   Distribution  │      ││
+│  │  │   (Overcurrent, │  │   (Hardware     │  │   Board         │      ││
+│  │  │   Overvoltage)  │  │   Interlock)    │  │   (PDN)         │      ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘      ││
+│  │         │                       │                       │            ││
+│  │         └───────────────────────┼───────────────────────┘            ││
+│  │                                 ▼                                    ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐││
+│  │  │                    MOTOR POWER CHAINS                         │││
+│  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐           │││
+│  │  │  │  Joint 1    │  │  Joint 2    │  │  Joint N    │           │││
+│  │  │  │  (Current   │  │  (Current   │  │  (Current   │           │││
+│  │  │  │  Limit,     │  │  Limit,     │  │  Limit,     │           │││
+│  │  │  │  Temp Sense) │  │  Temp Sense) │  │  Temp Sense) │           │││
+│  │  │  └─────────────┘  └─────────────┘  └─────────────┘           │││
+│  │  └─────────────────────────────────────────────────────────────────┘││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  Sensor Safety Integration:                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐        ││
+│  │  │   Joint         │  │   IMU &         │  │   Force/Torque  │        ││
+│  │  │   Encoders      │  │   Safety        │  │   Sensors       │        ││
+│  │  │   (Position     │  │   Sensors       │  │   (Contact      │        ││
+│  │  │   Feedback)     │  │   (Tilt, Accel) │  │   Detection)    │        ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘        ││
+│  │         │                       │                       │              ││
+│  │         ▼                       ▼                       ▼              ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐  ││
+│  │  │                   MICROCONTROLLER/SoC                         │  ││
+│  │  │  • Real-time processing                                         │  ││
+│  │  │  • Hardware-based safety checks                               │  ││
+│  │  │  • Watchdog timers                                            │  ││
+│  │  │  • Safety-critical code execution                             │  ││
+│  │  └─────────────────────────────────────────────────────────────────┘  ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  Communication Safety:                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐        ││
+│  │  │   CAN Bus       │  │   EtherCAT      │  │   Safety        │        ││
+│  │  │   (Motor        │  │   (High-speed   │  │   Ethernet      │        ││
+│  │  │   Control)      │  │   I/O)          │  │   (Critical     │        ││
+│  │  │                 │  │                 │  │   Safety)       │        ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘        ││
+│  │         │                       │                       │              ││
+│  │         └───────────────────────┼───────────────────────┘              ││
+│  │                                 ▼                                      ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐  ││
+│  │  │                   SAFETY COMMUNICATION                        │  ││
+│  │  │  • Redundant communication paths                              │  ││
+│  │  │  • Safety protocols (SIL-compliant)                          │  ││
+│  │  │  • Error detection & correction                               │  ││
+│  │  │  • Message authentication                                     │  ││
+│  │  └─────────────────────────────────────────────────────────────────┘  ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## ROS 2 Safety Node Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    ROS 2 SAFETY NODE SYSTEM                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Safety Manager Node:                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  ┌─────────────────────────────────────────────────────────────────┐  ││
+│  │  │                    SAFETY MANAGER                           │  ││
+│  │  │                                                               │  ││
+│  │  │  Subscribers:                                                 │  ││
+│  │  │  • /joint_states (current joint positions, velocities)      │  ││
+│  │  │  • /imu/data (orientation, angular velocity, linear accel)  │  ││
+│  │  │  • /tf (transforms for collision detection)                 │  ││
+│  │  │  • /robot_status (system status messages)                   │  ││
+│  │  │                                                               │  ││
+│  │  │  Publishers:                                                  │  ││
+│  │  │  • /safety_status (safety state, risk level)                │  ││
+│  │  │  • /emergency_stop (emergency stop commands)                │  ││
+│  │  │  • /safe_motion_commands (safe trajectory overrides)        │  ││
+│  │  │                                                               │  ││
+│  │  │  Services:                                                    │  ││
+│  │  │  • /trigger_emergency_stop (external emergency trigger)     │  ││
+│  │  │  • /reset_safety_system (safety system reset)               │  ││
+│  │  │  • /get_safety_status (query safety status)                 │  ││
+│  │  └─────────────────────────────────────────────────────────────────┘  ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  Specialized Safety Monitors:                                               │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Balance       │  │   Collision     │  │   Joint Limit   │            │
+│  │   Monitor       │  │   Monitor       │  │   Monitor       │            │
+│  │                 │  │                 │  │                 │            │
+│  │ • Monitor IMU   │  │ • Check URDF    │  │ • Monitor joint │            │
+│  │   for tilt      │  │   for self/     │  │   positions,    │            │
+│  │   angles        │  │   environment   │  │   velocities,   │            │
+│  │ • Check ZMP     │  │   collisions    │  │   efforts       │            │
+│  │   stability     │  │ • Predict       │  │ • Check limits  │            │
+│  │ • Trigger       │  │   collisions    │  │ • Emergency     │            │
+│  │   recovery      │  │ • Visualize     │  │   stops         │            │
+│  │   if needed     │  │   collision     │  │                 │            │
+│  │                 │  │   zones         │  │                 │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│         │                       │                       │                  │
+│         ▼                       ▼                       ▼                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Balance       │  │   Collision     │  │   Joint Limit   │            │
+│  │   Recovery      │  │   Avoidance     │  │   Enforcement   │            │
+│  │   Actions       │  │   Actions       │  │   Actions       │            │
+│  │                 │  │                 │  │                 │            │
+│  │ • Adjust gait   │  │ • Modify path   │  │ • Clamp values  │            │
+│  │ • Shift weight  │  │ • Stop motion   │  │ • Reduce speed  │            │
+│  │ • Prepare fall  │  │ • Change        │  │ • Emergency     │            │
+│  │   recovery      │  │   trajectory    │  │   stop          │            │
+│  │                 │  │                 │  │                 │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```

@@ -1,0 +1,168 @@
+# Node-Topic Communication Pattern (Publish-Subscribe)
+
+## Basic Publisher-Subscriber Pattern
+
+```
+┌─────────────────┐                    ┌─────────────────┐
+│   Publisher     │                    │   Subscriber    │
+│   Node          │                    │   Node          │
+│                 │                    │                 │
+│  ┌───────────┐  │     publishes      │  ┌───────────┐  │
+│  │  Sensor   │  │   ┌─────────────┐  │  │  Control  │  │
+│  │  Data     │  │───│ Topic:      │──┼──│  Logic    │  │
+│  │  Loop     │  │   │ /joint_data │  │  │  Loop     │  │
+│  └───────────┘  │   └─────────────┘  │  └───────────┘  │
+│                 │                    │                 │
+│  ┌───────────┐  │     receives       │  ┌───────────┐  │
+│  │ Create    │  │   ┌─────────────┐  │  │ Process   │  │
+│  │ Message   │  │<──│ Message:    │<─┼──│ Received  │  │
+│  │ JointState│  │   │ JointState  │  │  │ Message   │  │
+│  └───────────┘  │   └─────────────┘  │  └───────────┘  │
+└─────────────────┘                    └─────────────────┘
+```
+
+## Multiple Publishers and Subscribers
+
+```
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   Publisher     │  │   Publisher     │  │   Publisher     │
+│   1: IMU        │  │   2: Joint      │  │   3: Camera     │
+│   Sensor        │  │   Encoder       │  │   Data          │
+│                 │  │                 │  │                 │
+│  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │
+│  │ Read IMU  │  │  │  │ Read      │  │  │  │ Capture   │  │
+│  │ Data      │  │  │  │ Encoders  │  │  │  │ Image     │  │
+│  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │
+│                 │  │                 │  │                 │
+│  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │
+│  │ Create    │  │  │  │ Create    │  │  │  │ Create    │  │
+│  │ Imu.msg   │  │  │  │ JointState│  │  │  │ Image.msg │  │
+│  └───────────┘  │  │  │ .msg      │  │  │  └───────────┘  │
+│                 │  │  └───────────┘  │  │                 │
+│                 │  │                 │  │                 │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+                                │
+                                │
+                    ┌─────────────────────────────────┐
+                    │         ROS 2 Middleware        │
+                    │    (Manages Topic: /sensors)    │
+                    └─────────────────────────────────┘
+                                │
+                                │
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   Subscriber    │  │   Subscriber    │  │   Subscriber    │
+│   1: Control    │  │   2: Monitoring │  │   3: Perception │
+│   Node          │  │   Node          │  │   Node          │
+│                 │  │                 │  │                 │
+│  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │
+│  │ Register  │  │  │  │ Register  │  │  │  │ Register  │  │
+│  │ Callback  │  │  │  │ Callback  │  │  │  │ Callback  │  │
+│  │ for       │  │  │  │ for       │  │  │  │ for       │  │
+│  │ /sensors  │  │  │  │ /sensors  │  │  │  │ /sensors  │  │
+│  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │
+│                 │  │                 │  │                 │
+│  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │
+│  │ Process   │  │  │  │ Process   │  │  │  │ Process   │  │
+│  │ IMU Data  │  │  │  │ Process   │  │  │  │ Process   │  │
+│  │ for       │  │  │  │ Joint Data│  │  │  │ Camera    │  │
+│  │ Balance   │  │  │  │ for       │  │  │  │ Data for  │  │
+│  │ Control   │  │  │  │ Motion    │  │  │  │ Perception│  │
+│  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
+
+## Quality of Service (QoS) Settings Impact
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              QoS Settings in Topic Communication              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Publisher with RELIABLE QoS:                                  │
+│  ┌─────────────────┐                                           │
+│  │   Publisher     │                                           │
+│  │   Node          │                                           │
+│  │                 │                                           │
+│  │  ┌───────────┐  │  ┌─────────────────────────────────────┐  │
+│  │  │ Publish   │  │  │ QoS Settings:                       │  │
+│  │  │ Message   │  │──│ - Reliability: RELIABLE            │  │
+│  │  │ with QoS  │  │  │ - Durability: VOLATILE             │  │
+│  │  └───────────┘  │  │ - History: KEEP_LAST (depth: 10)   │  │
+│  └─────────────────┘  └─────────────────────────────────────┘  │
+│                                                                 │
+│           Ensures message delivery to subscribers               │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                ROS 2 Middleware                         │   │
+│  │  Handles QoS matching and message delivery              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  Multiple Subscribers with different QoS:                      │
+│  ┌─────────────────┐  ┌─────────────────┐                      │
+│  │   Subscriber    │  │   Subscriber    │                      │
+│  │   (Control)     │  │   (Logging)     │                      │
+│  │                 │  │                 │                      │
+│  │  ┌───────────┐  │  │  ┌───────────┐  │                      │
+│  │  │ Match QoS │  │  │  │ Match QoS │  │                      │
+│  │  │ Settings  │  │  │  │ Settings  │  │                      │
+│  │  │ for       │  │  │  │ for       │  │                      │
+│  │  │ Reliable  │  │  │  │ Reliable  │  │                      │
+│  │  │ Delivery  │  │  │  │ Delivery  │  │                      │
+│  │  └───────────┘  │  │  └───────────┘  │                      │
+│  └─────────────────┘  └─────────────────┘                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Humanoid Robot Example: Joint State Communication
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│         Humanoid Robot Joint State Communication              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Sensor Nodes (Hardware Interface):                            │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │ Joint Encoder   │  │ IMU Sensor      │  │ Force/Torque    │ │
+│  │ Reader          │  │ Reader          │  │ Sensor Reader   │ │
+│  │                 │  │                 │  │                 │ │
+│  │ ┌─────────────┐ │  │ ┌─────────────┐ │  │ ┌─────────────┐ │ │
+│  │ │Read Joint   │ │  │ │Read IMU     │ │  │ │Read Force/  │ │ │
+│  │ │Positions    │ │  │ │Data         │ │  │ │Torque Data  │ │ │
+│  │ └─────────────┘ │  │ └─────────────┘ │  │ └─────────────┘ │ │
+│  │ ┌─────────────┐ │  │ ┌─────────────┐ │  │ ┌─────────────┐ │ │
+│  │ │Create       │ │  │ │Create       │ │  │ │Create       │ │ │
+│  │ │JointState   │ │  │ │Imu.msg      │ │  │ │Wrench.msg   │ │ │
+│  │ │.msg         │ │  │ │             │ │  │ │             │ │ │
+│  │ └─────────────┘ │  │ └─────────────┘ │  │ └─────────────┘ │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│                    │              │              │             │
+│                    └──────────────┼──────────────┘             │
+│                                   │                            │
+│                    ┌─────────────────────────────────────────┐ │
+│                    │         ROS 2 Middleware              │ │
+│                    │    Manages:                           │ │
+│                    │    - /joint_states                    │ │
+│                    │    - /imu/data                        │ │
+│                    │    - /ft_sensors                      │ │
+│                    └─────────────────────────────────────────┘ │
+│                                   │                            │
+│                    ┌──────────────┼──────────────┐             │
+│                    │              │              │             │
+│  Control Nodes:    │              │              │             │
+│  ┌─────────────────┼──────────────┼──────────────┼─────────────┤
+│  │Balance Control  ││Motion       ││Perception   ││Monitoring  ││
+│  │Node             ││Planning     ││Node         ││Node        ││
+│  │                 ││Node         ││             ││            ││
+│  │┌─────────────┐ ││┌─────────────┐│┌─────────────┐│┌─────────┐││
+│  ││Subscribe to │ │││Subscribe to │││Subscribe to │││Subscribe│││
+│  ││/joint_states│ │││/joint_states│││/joint_states│││/joint_  │││
+│  ││and /imu/   │ │││and /imu/    │││and other    │││states   │││
+│  ││data        │ │││data         │││sensor data  │││for      │││
+│  ││for balance │ │││for motion   │││for          │││diagnosis│││
+│  ││control     │ │││planning     │││perception   │││         │││
+│  │└─────────────┘ ││└─────────────┘│└─────────────┘│└─────────┘││
+│  └─────────────────┘└───────────────┘└─────────────┘└──────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```

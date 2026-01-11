@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"cd F:\\\\Humanoid-Robotics-Hackathon\\\\frontend; npm install\")",
+      "Bash(powershell -Command \"cd F:\\\\Humanoid-Robotics-Hackathon\\\\frontend; npm start\")"
+    ]
+  }
+}

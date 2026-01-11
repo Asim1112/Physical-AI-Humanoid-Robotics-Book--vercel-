@@ -1,0 +1,196 @@
+# Module 2 Exercises: Digital Twin Simulation
+
+## Learning Objectives
+
+By completing these exercises, you will be able to:
+- Configure and run Gazebo physics simulations for humanoid robots
+- Implement Unity visualization for robot simulation
+- Integrate ROS 2 with simulation environments
+- Validate physics simulation fidelity
+- Design sensor simulation models with realistic noise characteristics
+
+## Exercise 1: Basic Gazebo Simulation Setup
+
+### Objective
+Set up a basic Gazebo simulation environment with a humanoid robot model and verify the physics engine configuration.
+
+### Tasks
+1. Create a simple humanoid robot URDF/SDF model with at least 12 joints (hips, knees, ankles, shoulders, elbows)
+2. Configure a Gazebo world file with appropriate physics parameters (gravity, solver type, step size)
+3. Launch the simulation and verify that the robot model loads correctly
+4. Test basic joint control by sending position commands to the robot
+
+### Requirements
+- Robot model must include proper inertial properties
+- Physics engine must be configured with realistic parameters
+- Simulation should run at real-time factor (RTF) of at least 0.8
+- Joint controllers should respond to commands within 100ms
+
+### Validation Steps
+- Verify robot model stability in simulation
+- Check that joint limits are respected
+- Confirm realistic movement patterns
+- Measure simulation performance (RTF, CPU usage)
+
+## Exercise 2: Physics Parameter Tuning
+
+### Objective
+Tune physics parameters to achieve realistic humanoid robot behavior and maintain simulation stability.
+
+### Tasks
+1. Adjust solver parameters (type, iterations, step size) for optimal performance
+2. Tune contact parameters (mu, mu2, kp, kd) for realistic friction and contact response
+3. Configure joint damping and friction parameters for realistic movement
+4. Validate the tuned parameters against real-world robot behavior
+
+### Requirements
+- Simulation must remain stable under dynamic movements
+- Contact responses should be physically realistic
+- Joint movements should exhibit appropriate damping
+- Performance should maintain RTF > 0.8
+
+### Validation Steps
+- Test robot balance with various center of mass positions
+- Verify contact stability during walking/locomotion
+- Check for joint oscillations or instability
+- Measure energy conservation in passive systems
+
+## Exercise 3: Sensor Simulation Implementation
+
+### Objective
+Implement realistic sensor simulation models with proper noise characteristics for a humanoid robot.
+
+### Tasks
+1. Create an IMU simulation node with realistic noise models (gyro/accel noise density, bias random walk)
+2. Implement a 3D LiDAR simulation with appropriate range, resolution, and noise parameters
+3. Develop camera simulation with realistic distortion and noise models
+4. Validate sensor outputs against expected real-world sensor characteristics
+
+### Requirements
+- IMU must include proper noise models (white noise, bias drift)
+- LiDAR must simulate realistic range limitations and noise
+- Camera must include distortion and appropriate resolution
+- All sensors must publish standard ROS 2 message types
+
+### Validation Steps
+- Verify IMU noise characteristics match specifications
+- Test LiDAR performance in various environments
+- Check camera distortion parameters
+- Validate sensor data consistency and timing
+
+## Exercise 4: Unity-ROS Integration
+
+### Objective
+Implement a Unity visualization system that integrates with ROS 2 simulation.
+
+### Tasks
+1. Set up Unity-ROS bridge communication for real-time robot visualization
+2. Create 3D models and materials for the humanoid robot in Unity
+3. Implement real-time animation and control feedback in Unity
+4. Add user interface elements for simulation monitoring and control
+
+### Requirements
+- Unity must receive real-time robot state from ROS 2
+- Robot movements in Unity must match Gazebo simulation
+- UI must display relevant simulation metrics
+- Communication must maintain low latency (&lt;50ms)
+
+### Validation Steps
+- Verify synchronization between Gazebo and Unity
+- Test real-time control feedback
+- Check UI responsiveness and accuracy
+- Validate communication stability under load
+
+## Exercise 5: Simulation Validation and Fidelity Assessment
+
+### Objective
+Develop and implement validation systems to assess simulation fidelity and performance.
+
+### Tasks
+1. Create a physics validation node that compares simulation vs expected physical behavior
+2. Implement sensor validation to assess sensor model accuracy
+3. Develop performance monitoring tools to track simulation metrics
+4. Design experiments to validate sim-to-real transfer capabilities
+
+### Requirements
+- Validation metrics must be quantitative and meaningful
+- System must track real-time performance metrics
+- Validation should cover multiple aspects (kinematics, dynamics, sensors)
+- Tools must be suitable for continuous monitoring
+
+### Validation Steps
+- Compare simulation behavior to theoretical models
+- Validate sensor accuracy against real-world data
+- Measure simulation stability over extended runs
+- Assess sim-to-real transfer capabilities
+
+## Exercise 6: Multi-Robot Simulation
+
+### Objective
+Extend the simulation to support multiple robots in a shared environment.
+
+### Tasks
+1. Configure Gazebo to handle multiple humanoid robots simultaneously
+2. Implement collision avoidance and interaction models
+3. Set up separate ROS 2 namespaces for each robot
+4. Validate multi-robot coordination and communication
+
+### Requirements
+- Each robot must have independent control systems
+- Collision detection must work between robots
+- Communication systems must be properly isolated
+- Performance should scale appropriately with robot count
+
+### Validation Steps
+- Test collision detection between robots
+- Verify independent control systems
+- Check communication isolation
+- Measure performance scaling
+
+## Learning Checkpoints
+
+### Checkpoint 1: Physics Simulation Fundamentals
+- [ ] Can configure Gazebo physics parameters for humanoid robots
+- [ ] Understand contact simulation and force modeling
+- [ ] Can validate physics simulation stability
+- [ ] Know how to tune parameters for performance
+
+### Checkpoint 2: Sensor Simulation and Modeling
+- [ ] Understand realistic sensor noise models
+- [ ] Can implement IMU simulation with proper characteristics
+- [ ] Know how to model various sensor types (LiDAR, camera, etc.)
+- [ ] Can validate sensor simulation accuracy
+
+### Checkpoint 3: ROS 2 Integration
+- [ ] Can set up Gazebo-ROS communication
+- [ ] Understand ROS 2 control interfaces for simulation
+- [ ] Can implement Unity-ROS bridge communication
+- [ ] Know how to validate simulation integration
+
+### Checkpoint 4: Simulation Validation
+- [ ] Understand simulation fidelity assessment
+- [ ] Can implement validation metrics and monitoring
+- [ ] Know how to validate sim-to-real transfer
+- [ ] Can identify and address simulation issues
+
+## Challenge Exercises
+
+### Challenge 1: Dynamic Environment Simulation
+Implement a simulation environment that includes moving obstacles and dynamic elements that interact with the humanoid robot.
+
+### Challenge 2: Sim-to-Real Transfer Validation
+Design and implement experiments to validate the transfer of learned behaviors from simulation to real hardware.
+
+### Challenge 3: High-Fidelity Contact Modeling
+Implement advanced contact models that accurately simulate the interaction between humanoid robot feet and various ground surfaces.
+
+## Resources and References
+
+- Gazebo Documentation: http://gazebosim.org/
+- Unity Robotics Hub: https://github.com/Unity-Technologies/Unity-Robotics-Hub
+- ROS 2 Control Documentation: https://control.ros.org/
+- Physics Validation Techniques: [Additional references to be added]
+
+## Solutions and Guidance
+
+Solutions for these exercises will be provided in the instructor materials. Students are encouraged to work through the exercises independently before consulting solutions. For additional support, refer to the simulation examples provided in the module.

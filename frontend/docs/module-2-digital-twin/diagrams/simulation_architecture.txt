@@ -1,0 +1,212 @@
+# Simulation Architecture Overview
+
+## High-Level Simulation Architecture
+
+<!-- Accessibility Description: This diagram shows the high-level simulation architecture with physical world (real humanoid robot with sensors, motors, physics, and environment) connected to virtual world (simulated humanoid robot). A real-time robot controller (ROS 2) sends commands to both worlds. The simulation platform includes Gazebo (physics & sensors), Unity (graphics & interaction), and ROS 2 (control & logic) with specialized components for each. -->
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       SIMULATION ARCHITECTURE                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PHYSICAL WORLD                     VIRTUAL WORLD                         │
+│  ┌─────────────────┐              ┌─────────────────┐                     │
+│  │  Humanoid       │              │  Simulated      │                     │
+│  │  Robot          │              │  Humanoid       │                     │
+│  │                 │              │  Robot          │                     │
+│  │ • Real Sensors  │◄───DATA──────┤ • Simulated     │                     │
+│  │ • Real Motors   │   FLOW       │   Sensors       │                     │
+│  │ • Real Physics  │              │ • Simulated     │                     │
+│  │ • Real Env      │              │   Physics       │                     │
+│  └─────────────────┘              │ • Simulated     │                     │
+│                                   │   Environment   │                     │
+│  REAL-TIME CONTROL               │                 │                     │
+│  ┌─────────────────┐             └─────────────────┘                     │
+│  │  Robot          │                     │                               │
+│  │  Controller     │─────────COMMAND─────►                               │
+│  │  (ROS 2)        │     FLOW                                            │
+│  └─────────────────┘                                                     │
+│         │                                                                  │
+│         ▼                                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                     SIMULATION PLATFORM                           │   │
+│  │                                                                   │   │
+│  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐          │   │
+│  │  │   Gazebo    │    │    Unity    │    │   ROS 2     │          │   │
+│  │  │  (Physics   │    │ (Graphics & │    │  (Control   │          │   │
+│  │  │  & Sensors) │    │  Interaction)│    │   & Logic)  │          │   │
+│  │  └─────────────┘    └─────────────┘    └─────────────┘          │   │
+│  │         │                    │                    │              │   │
+│  │         ▼                    ▼                    ▼              │   │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │   │
+│  │  │ • Physics      │  │ • Visualization│  │ • Control      │  │   │
+│  │  │   Simulation   │  │   & UI         │  │   Algorithms   │  │   │
+│  │  │ • Sensor       │  │ • VR/AR        │  │ • Planning     │  │   │
+│  │  │   Simulation   │  │   Integration  │  │ • Perception   │  │   │
+│  │  │ • Contact      │  │ • Human-       │  │ • Behavior     │  │   │
+│  │  │   Modeling     │  │   Robot Inter. │  │   Management   │  │   │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Simulation Integration Layers
+
+<!-- Accessibility Description: This diagram shows the simulation integration layers from top to bottom: Application Layer (robot control algorithms, motion planning, perception), Simulation Control Layer (simulation manager, physics engine config, sensor control), Communication Layer (ROS bridges, QoS management), and Physics & Rendering Layer (physics engines, collision detection, graphics rendering). -->
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SIMULATION INTEGRATION LAYERS                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  APPLICATION LAYER:                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Robot Control Algorithms                                            ││
+│  │  • Motion Planning & Trajectory Generation                            ││
+│  │  • Perception & State Estimation                                       ││
+│  │  • High-Level Behaviors & Tasks                                        ││
+│  │  • Human-Robot Interaction Interfaces                                  ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  SIMULATION CONTROL LAYER:                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Simulation Manager & Orchestration                                  ││
+│  │  • Physics Engine Configuration                                        ││
+│  │  • Sensor Simulation Control                                           ││
+│  │  • Real-time Synchronization                                           ││
+│  │  • Performance Monitoring & Optimization                               ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  COMMUNICATION LAYER:                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • ROS 2 Message Bridge (Gazebo-ROS)                                   ││
+│  │  • Network Communication (Unity-ROS)                                   ││
+│  │  • Quality of Service (QoS) Management                                 ││
+│  │  • Message Serialization & Deserialization                             ││
+│  │  • Connection Management & Error Handling                              ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  PHYSICS & RENDERING LAYER:                                                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Physics Engine (ODE, Bullet, etc.)                                  ││
+│  │  • Collision Detection & Response                                      ││
+│  │  • Graphics Rendering Engine                                           ││
+│  │  • Visual Effects & Shaders                                            ││
+│  │  • Real-time Performance Management                                    ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Data Flow in Simulation System
+
+<!-- Accessibility Description: This diagram shows three data flow patterns: (1) Sensor Data Flow from physical sensors through simulation engine (Gazebo) to ROS subscribers, adding noise/distortion for realism. (2) Control Command Flow from ROS publishers through simulation engine to physical actuators, applying commands to simulated joints. (3) Validation & Monitoring Flow from simulation metrics through fidelity validation to performance monitoring systems. -->
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         DATA FLOW PATTERNS                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  SENSOR DATA FLOW:                                                          │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐        │
+│  │   Physical      │    │  Simulation     │    │   ROS 2         │        │
+│  │   Sensors       │───►│   Engine        │───►│   Subscribers   │        │
+│  │   (Real Robot)  │    │   (Gazebo)      │    │   (Control)     │        │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘        │
+│         │                       │                       │                  │
+│         │ Generates realistic   │ Adds noise &          │ Processes for    │
+│         │ sensor readings       │ distortion models     │ control &       │
+│         │ based on physical     │ for realism           │ perception      │
+│         │ interactions          │                       │ algorithms      │
+│                                                                             │
+│  CONTROL COMMAND FLOW:                                                      │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐        │
+│  │   ROS 2         │    │  Simulation     │    │   Physical      │        │
+│  │   Publishers    │───►│   Engine        │───►│   Actuators     │        │
+│  │   (Control)     │    │   (Gazebo)      │    │   (Real Robot)  │        │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘        │
+│         │                       │                       │                  │
+│         │ Send control          │ Apply commands        │ Execute physical│
+│         │ commands based        │ to simulated          │ movements &    │
+│         │ on planning &         │ joints/actuators      │ actions         │
+│         │ perception            │ in simulation         │                 │
+│                                                                             │
+│  VALIDATION & MONITORING FLOW:                                             │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐        │
+│  │   Simulation    │    │  Fidelity       │    │   Performance   │        │
+│  │   Metrics       │───►│   Validation    │───►│   Monitoring    │        │
+│  │   (Gazebo)      │    │   Engine        │    │   System        │        │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘        │
+│         │                       │                       │                  │
+│         │ Extract physics       │ Compare sim vs        │ Track system    │
+│         │ state, sensor         │ real characteristics  │ performance,    │
+│         │ readings, timing      │ for fidelity          │ resource usage  │
+│         │ data                  │ assessment            │ and bottlenecks │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Humanoid Robot Simulation Example
+
+<!-- Accessibility Description: This diagram shows the humanoid robot simulation components: Gazebo Simulation (robot model URDF/SDF, physics engine ODE, environment world file) with core Gazebo engine handling model database, physics updates, sensor processing. Unity Visualization (3D models, animation effects, user interface) with Unity engine for scene management and physics. ROS 2 Integration (sensor publishers, control subscribers, validation services) for joint states, IMU data, camera feed, control commands, and performance monitoring. -->
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    HUMANOID ROBOT SIMULATION                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  SIMULATION COMPONENTS:                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  GAZEBO SIMULATION:                                                    ││
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐       ││
+│  │  │  Robot Model    │  │  Physics        │  │  Environment    │       ││
+│  │  │  (URDF/SDF)     │  │  Engine (ODE)   │  │  (World File)   │       ││
+│  │  │                 │  │                 │  │                 │       ││
+│  │  │ • Links & Joints│  │ • Gravity       │  │ • Ground Plane  │       ││
+│  │  │ • Inertial Props│  │ • Collision     │  │ • Obstacles     │       ││
+│  │  │ • Visual/Collis │  │ • Contact       │  │ • Lighting      │       ││
+│  │  │ • Sensor Models │  │ • Dynamics      │  │ • Objects       │       ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘       ││
+│  │         │                       │                       │             ││
+│  │         ▼                       ▼                       ▼             ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐ ││
+│  │  │                    GAZEBO CORE                                  │ ││
+│  │  │  • Model Database      • Physics Updates                       │ ││
+│  │  │  • Sensor Processing   • Collision Detection                    │ ││
+│  │  │  • Rendering Manager   • Joint Control                          │ ││
+│  │  └─────────────────────────────────────────────────────────────────┘ ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  UNITY VISUALIZATION:                                                  ││
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐       ││
+│  │  │  3D Models &    │  │  Animation &   │  │  User Interface │       ││
+│  │  │  Rendering      │  │  Visual Effects│  │  & Interaction │       ││
+│  │  │                 │  │                 │  │                 │       ││
+│  │  │ • Robot Meshes  │  │ • Physics-based │  │ • VR/AR Support │       ││
+│  │  │ • Materials     │  │   Animation     │  │ • Control Panel │       ││
+│  │  │ • Textures      │  │ • Lighting      │  │ • Data Overlay  │       ││
+│  │  │ • Shaders       │  │ • Particles     │  │ • Debug Tools   │       ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘       ││
+│  │         │                       │                       │             ││
+│  │         ▼                       ▼                       ▼             ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐ ││
+│  │  │                   UNITY ENGINE                                  │ ││
+│  │  │  • Scene Manager      • Asset Pipeline                         │ ││
+│  │  │  • Camera System      • Physics Integration                     │ ││
+│  │  │  • Audio System       • Input Handling                          │ ││
+│  │  └─────────────────────────────────────────────────────────────────┘ ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  ROS 2 INTEGRATION:                                                    ││
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐       ││
+│  │  │  Sensor         │  │  Control       │  │  Validation     │       ││
+│  │  │  Publishers     │  │  Subscribers   │  │  Services       │       ││
+│  │  │                 │  │                 │  │                 │       ││
+│  │  │ • Joint States  │  │ • Joint Cmds   │  │ • Fidelity      │       ││
+│  │  │ • IMU Data      │  │ • Velocity     │  │   Assessment    │       ││
+│  │  │ • Camera Feed   │  │ • Trajectories │  │ • Performance   │       ││
+│  │  │ • LiDAR Scan    │  │ • Behaviors    │  │   Monitoring    │       ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```

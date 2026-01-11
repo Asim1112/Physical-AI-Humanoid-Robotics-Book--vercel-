@@ -1,0 +1,771 @@
+# Language and Intent Understanding
+
+## Overview
+
+Natural language understanding is a critical component of VLA systems, enabling humanoid robots to interpret human commands and infer intended actions. This chapter explores how language models process instructions, extract semantic meaning, and translate linguistic intent into executable robot behaviors.
+
+## Language Processing Pipeline
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              LANGUAGE UNDERSTANDING PIPELINE                 │
+│                                                              │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌─────────┐ │
+│  │  TEXT    │──►│  TOKEN   │──►│  SEMANTIC│──►│  INTENT │ │
+│  │  INPUT   │   │  ENCODING│   │  PARSING │   │  EXTRACT│ │
+│  └──────────┘   └──────────┘   └──────────┘   └─────────┘ │
+│       │              │               │              │       │
+│       │              │               │              ▼       │
+│       │              │               │         ┌─────────┐ │
+│       │              │               │         │  ACTION │ │
+│       │              │               │         │  PARAMS │ │
+│       │              │               │         └─────────┘ │
+│       │              │               ▼                      │
+│       │              │         ┌──────────┐                │
+│       │              │         │  ENTITY  │                │
+│       │              │         │  RECOG.  │                │
+│       │              │         └──────────┘                │
+│       │              ▼                                      │
+│       │         ┌──────────┐                               │
+│       │         │ ATTENTION│                               │
+│       │         │  CONTEXT │                               │
+│       │         └──────────┘                               │
+│       ▼                                                     │
+│  ┌──────────┐                                              │
+│  │ LANGUAGE │                                              │
+│  │  MEMORY  │                                              │
+│  └──────────┘                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Intent Recognition
+
+### Intent Classification
+
+Classify user commands into predefined intent categories:
+
+```python
+import torch
+import torch.nn as nn
+from transformers import BertModel, BertTokenizer
+from typing import List, Dict, Tuple
+
+class IntentClassifier(nn.Module):
+    """
+    Intent classifier for robot commands.
+    Maps natural language to predefined action intents.
+    """
+
+    def __init__(self, num_intents=20, hidden_dim=768):
+        super().__init__()
+
+        # Load pre-trained BERT
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
+
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, num_intents)
+        )
+
+        # Intent labels
+        self.intent_labels = [
+            'pick_and_place',
+            'navigate_to',
+            'follow_person',
+            'hand_object',
+            'open_door',
+            'close_door',
+            'push_button',
+            'turn_on',
+            'turn_off',
+            'wave_hand',
+            'nod_head',
+            'shake_head',
+            'point_at',
+            'look_at',
+            'wait',
+            'stop',
+            'return_home',
+            'follow_trajectory',
+            'grasp_object',
+            'release_object'
+        ]
+
+    def forward(self, text_inputs: List[str]) -> torch.Tensor:
+        """
+        Classify intent from text input.
+
+        Args:
+            text_inputs: List of command strings
+
+        Returns:
+            Intent logits [batch_size, num_intents]
+        """
+        # Tokenize
+        encoding = self.tokenizer(
+            text_inputs,
+            padding=True,
+            truncation=True,
+            max_length=128,
+            return_tensors='pt'
+        )
+
+        input_ids = encoding['input_ids'].to(self.bert.device)
+        attention_mask = encoding['attention_mask'].to(self.bert.device)
+
+        # BERT encoding
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        pooled_output = outputs.pooler_output
+
+        # Classification
+        logits = self.classifier(pooled_output)
+
+        return logits
+
+    def predict_intent(self, text: str, return_confidence: bool = True) -> Dict:
+        """
+        Predict intent from a single text command.
+
+        Args:
+            text: Command string
+            return_confidence: Whether to return confidence scores
+
+        Returns:
+            Dictionary with intent and optional confidence
+        """
+        self.eval()
+        with torch.no_grad():
+            logits = self.forward([text])
+            probs = torch.softmax(logits, dim=-1)
+            intent_idx = torch.argmax(probs, dim=-1).item()
+            confidence = probs[0, intent_idx].item()
+
+        result = {
+            'intent': self.intent_labels[intent_idx],
+            'intent_idx': intent_idx
+        }
+
+        if return_confidence:
+            result['confidence'] = confidence
+            # Get top-3 intents
+            top_probs, top_indices = torch.topk(probs[0], k=3)
+            result['top_intents'] = [
+                {
+                    'intent': self.intent_labels[idx.item()],
+                    'confidence': prob.item()
+                }
+                for idx, prob in zip(top_indices, top_probs)
+            ]
+
+        return result
+```
+
+### Slot Filling and Entity Recognition
+
+Extract specific parameters from commands:
+
+```python
+from transformers import pipeline
+
+class SlotFiller(nn.Module):
+    """
+    Extract entities and parameters from natural language commands.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        # Named Entity Recognition model
+        self.ner_pipeline = pipeline(
+            "ner",
+            model="dslim/bert-base-NER",
+            aggregation_strategy="simple"
+        )
+
+        # Slot definitions
+        self.slot_types = {
+            'object': ['OBJECT', 'THING'],
+            'location': ['LOCATION', 'PLACE'],
+            'person': ['PERSON'],
+            'color': ['COLOR'],
+            'direction': ['DIRECTION'],
+            'quantity': ['NUMBER', 'QUANTITY']
+        }
+
+    def extract_slots(self, text: str) -> Dict[str, List[Dict]]:
+        """
+        Extract slot values from text.
+
+        Args:
+            text: Input command
+
+        Returns:
+            Dictionary mapping slot types to extracted entities
+        """
+        # Run NER
+        entities = self.ner_pipeline(text)
+
+        # Organize by slot type
+        slots = {slot_type: [] for slot_type in self.slot_types.keys()}
+
+        for entity in entities:
+            entity_type = entity['entity_group']
+            entity_text = entity['word']
+            confidence = entity['score']
+
+            # Map entity type to slot type
+            for slot_type, entity_types in self.slot_types.items():
+                if entity_type in entity_types:
+                    slots[slot_type].append({
+                        'value': entity_text,
+                        'confidence': confidence,
+                        'start': entity['start'],
+                        'end': entity['end']
+                    })
+
+        # Additional rule-based extraction
+        slots = self._rule_based_extraction(text, slots)
+
+        return slots
+
+    def _rule_based_extraction(self, text: str, slots: Dict) -> Dict:
+        """Apply rule-based extraction for common patterns."""
+        import re
+
+        # Extract colors
+        colors = ['red', 'blue', 'green', 'yellow', 'black', 'white', 'orange', 'purple']
+        for color in colors:
+            if color in text.lower():
+                slots['color'].append({
+                    'value': color,
+                    'confidence': 1.0,
+                    'source': 'rule-based'
+                })
+
+        # Extract directions
+        directions = ['left', 'right', 'forward', 'backward', 'up', 'down', 'north', 'south', 'east', 'west']
+        for direction in directions:
+            if direction in text.lower():
+                slots['direction'].append({
+                    'value': direction,
+                    'confidence': 1.0,
+                    'source': 'rule-based'
+                })
+
+        # Extract quantities
+        numbers = re.findall(r'\b\d+\b', text)
+        for number in numbers:
+            slots['quantity'].append({
+                'value': int(number),
+                'confidence': 1.0,
+                'source': 'rule-based'
+            })
+
+        return slots
+```
+
+## Semantic Parsing
+
+### Command to Action Mapping
+
+Convert natural language commands to structured action representations:
+
+```python
+from dataclasses import dataclass
+from typing import Optional, List, Any
+
+@dataclass
+class ActionCommand:
+    """Structured representation of a robot action command."""
+    intent: str
+    object: Optional[str] = None
+    location: Optional[str] = None
+    target: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+    constraints: Optional[List[str]] = None
+    confidence: float = 1.0
+
+class SemanticParser:
+    """
+    Parse natural language commands into structured action representations.
+    """
+
+    def __init__(self):
+        self.intent_classifier = IntentClassifier()
+        self.slot_filler = SlotFiller()
+
+        # Load pre-trained models
+        self.intent_classifier.eval()
+
+    def parse_command(self, text: str) -> ActionCommand:
+        """
+        Parse natural language command into structured action.
+
+        Args:
+            text: Natural language command
+
+        Returns:
+            ActionCommand object
+        """
+        # Classify intent
+        intent_result = self.intent_classifier.predict_intent(text)
+        intent = intent_result['intent']
+        confidence = intent_result['confidence']
+
+        # Extract slots
+        slots = self.slot_filler.extract_slots(text)
+
+        # Extract primary object
+        obj = None
+        if slots['object']:
+            obj = slots['object'][0]['value']
+
+        # Extract location
+        location = None
+        if slots['location']:
+            location = slots['location'][0]['value']
+
+        # Extract target (person or object)
+        target = None
+        if slots['person']:
+            target = slots['person'][0]['value']
+
+        # Build parameters dictionary
+        parameters = {}
+
+        if slots['color']:
+            parameters['color'] = slots['color'][0]['value']
+
+        if slots['direction']:
+            parameters['direction'] = slots['direction'][0]['value']
+
+        if slots['quantity']:
+            parameters['quantity'] = slots['quantity'][0]['value']
+
+        # Extract constraints from command
+        constraints = self._extract_constraints(text)
+
+        return ActionCommand(
+            intent=intent,
+            object=obj,
+            location=location,
+            target=target,
+            parameters=parameters if parameters else None,
+            constraints=constraints if constraints else None,
+            confidence=confidence
+        )
+
+    def _extract_constraints(self, text: str) -> List[str]:
+        """Extract constraints from command text."""
+        constraints = []
+
+        # Common constraint patterns
+        constraint_patterns = {
+            'carefully': 'gentle_motion',
+            'quickly': 'fast_motion',
+            'slowly': 'slow_motion',
+            'gently': 'gentle_motion',
+            'without touching': 'no_contact',
+            'avoid': 'obstacle_avoidance'
+        }
+
+        text_lower = text.lower()
+        for pattern, constraint in constraint_patterns.items():
+            if pattern in text_lower:
+                constraints.append(constraint)
+
+        return constraints
+
+    def command_to_robot_action(self, command: ActionCommand) -> Dict:
+        """
+        Convert parsed command to robot-executable action.
+
+        Args:
+            command: Parsed ActionCommand
+
+        Returns:
+            Dictionary with robot action specification
+        """
+        action_spec = {
+            'type': command.intent,
+            'confidence': command.confidence
+        }
+
+        # Map intent to robot primitives
+        if command.intent == 'pick_and_place':
+            action_spec['primitive'] = 'manipulation'
+            action_spec['grasp_object'] = command.object
+            action_spec['place_location'] = command.location
+
+        elif command.intent == 'navigate_to':
+            action_spec['primitive'] = 'navigation'
+            action_spec['target_location'] = command.location or command.object
+
+        elif command.intent == 'hand_object':
+            action_spec['primitive'] = 'handover'
+            action_spec['object'] = command.object
+            action_spec['recipient'] = command.target
+
+        elif command.intent in ['wave_hand', 'nod_head', 'point_at']:
+            action_spec['primitive'] = 'gesture'
+            action_spec['gesture_type'] = command.intent
+            action_spec['target'] = command.target or command.object
+
+        # Add parameters
+        if command.parameters:
+            action_spec['parameters'] = command.parameters
+
+        # Add constraints
+        if command.constraints:
+            action_spec['constraints'] = command.constraints
+
+        return action_spec
+```
+
+## Contextual Understanding
+
+### Dialog Management
+
+Handle multi-turn conversations and context:
+
+```python
+from collections import deque
+
+class DialogManager:
+    """
+    Manage conversational context for robot commands.
+    """
+
+    def __init__(self, context_window=5):
+        self.context_window = context_window
+        self.conversation_history = deque(maxlen=context_window)
+        self.current_task = None
+        self.entities_in_context = {}
+
+    def process_utterance(self, text: str, semantic_parser: SemanticParser) -> ActionCommand:
+        """
+        Process utterance with conversational context.
+
+        Args:
+            text: User utterance
+            semantic_parser: Semantic parser instance
+
+        Returns:
+            ActionCommand with context resolution
+        """
+        # Parse the current utterance
+        command = semantic_parser.parse_command(text)
+
+        # Resolve references (pronouns, etc.)
+        command = self._resolve_references(command, text)
+
+        # Update conversation history
+        self.conversation_history.append({
+            'text': text,
+            'command': command,
+            'timestamp': time.time()
+        })
+
+        # Update entity context
+        self._update_entity_context(command)
+
+        # Update current task
+        if command.intent != 'wait' and command.intent != 'stop':
+            self.current_task = command
+
+        return command
+
+    def _resolve_references(self, command: ActionCommand, text: str) -> ActionCommand:
+        """Resolve pronouns and references to previously mentioned entities."""
+        text_lower = text.lower()
+
+        # Pronoun resolution
+        pronouns = ['it', 'that', 'this', 'them', 'those', 'these']
+
+        for pronoun in pronouns:
+            if pronoun in text_lower:
+                # Look for most recent relevant entity
+                if not command.object and 'object' in self.entities_in_context:
+                    command.object = self.entities_in_context['object']
+
+                if not command.location and 'location' in self.entities_in_context:
+                    command.location = self.entities_in_context['location']
+
+        # Relative location resolution
+        if command.location in ['there', 'here']:
+            if 'location' in self.entities_in_context:
+                command.location = self.entities_in_context['location']
+
+        return command
+
+    def _update_entity_context(self, command: ActionCommand):
+        """Update entities in context based on command."""
+        if command.object:
+            self.entities_in_context['object'] = command.object
+
+        if command.location:
+            self.entities_in_context['location'] = command.location
+
+        if command.target:
+            self.entities_in_context['target'] = command.target
+
+    def get_conversation_summary(self) -> str:
+        """Get summary of recent conversation."""
+        if not self.conversation_history:
+            return "No conversation history."
+
+        summary = "Recent conversation:\n"
+        for i, turn in enumerate(self.conversation_history):
+            summary += f"{i+1}. User: {turn['text']}\n"
+            summary += f"   Parsed: {turn['command'].intent}"
+            if turn['command'].object:
+                summary += f" (object: {turn['command'].object})"
+            summary += "\n"
+
+        return summary
+```
+
+## Language Grounding
+
+### Spatial Language Understanding
+
+Interpret spatial relationships and references:
+
+```python
+class SpatialLanguageGrounder:
+    """
+    Ground spatial language to physical locations and relationships.
+    """
+
+    def __init__(self):
+        # Spatial prepositions and their meanings
+        self.spatial_relations = {
+            'on': 'above_contact',
+            'above': 'above_no_contact',
+            'below': 'below',
+            'under': 'below_contact',
+            'in': 'inside',
+            'inside': 'inside',
+            'near': 'proximity',
+            'next to': 'adjacent',
+            'beside': 'adjacent',
+            'behind': 'behind',
+            'in front of': 'in_front',
+            'left of': 'left',
+            'right of': 'right',
+            'between': 'between'
+        }
+
+    def ground_spatial_expression(
+        self,
+        expression: str,
+        reference_objects: List[str],
+        scene_graph: Dict
+    ) -> Dict:
+        """
+        Ground spatial expression to scene locations.
+
+        Args:
+            expression: Spatial expression (e.g., "on the table")
+            reference_objects: List of objects in the scene
+            scene_graph: Scene representation with object positions
+
+        Returns:
+            Grounded location specification
+        """
+        # Extract spatial relation
+        relation = None
+        reference_object = None
+
+        for prep, rel_type in self.spatial_relations.items():
+            if prep in expression.lower():
+                relation = rel_type
+                # Extract reference object
+                parts = expression.lower().split(prep)
+                if len(parts) > 1:
+                    ref_text = parts[1].strip()
+                    # Match to actual object
+                    for obj in reference_objects:
+                        if obj.lower() in ref_text:
+                            reference_object = obj
+                            break
+                break
+
+        if not relation or not reference_object:
+            return {'status': 'failed', 'reason': 'Could not parse spatial expression'}
+
+        # Get reference object position from scene graph
+        if reference_object not in scene_graph:
+            return {'status': 'failed', 'reason': f'Object {reference_object} not found in scene'}
+
+        ref_position = scene_graph[reference_object]['position']
+        ref_bbox = scene_graph[reference_object].get('bbox', None)
+
+        # Calculate target location based on spatial relation
+        target_location = self._compute_spatial_location(
+            relation, ref_position, ref_bbox
+        )
+
+        return {
+            'status': 'success',
+            'relation': relation,
+            'reference_object': reference_object,
+            'target_location': target_location
+        }
+
+    def _compute_spatial_location(
+        self,
+        relation: str,
+        ref_position: List[float],
+        ref_bbox: Optional[Dict]
+    ) -> List[float]:
+        """Compute target location based on spatial relation."""
+        import numpy as np
+
+        x, y, z = ref_position
+
+        # Default offsets (in meters)
+        if relation == 'above_contact':
+            if ref_bbox:
+                z_offset = ref_bbox['height'] / 2 + 0.05  # 5cm above surface
+            else:
+                z_offset = 0.1
+            return [x, y, z + z_offset]
+
+        elif relation == 'above_no_contact':
+            return [x, y, z + 0.3]  # 30cm above
+
+        elif relation == 'below':
+            return [x, y, z - 0.3]
+
+        elif relation == 'proximity':
+            # Near but not specific direction - add small random offset
+            offset = np.random.uniform(-0.2, 0.2, size=2)
+            return [x + offset[0], y + offset[1], z]
+
+        elif relation == 'adjacent':
+            # To the side
+            return [x + 0.3, y, z]
+
+        elif relation == 'behind':
+            return [x, y - 0.3, z]
+
+        elif relation == 'in_front':
+            return [x, y + 0.3, z]
+
+        elif relation == 'left':
+            return [x - 0.3, y, z]
+
+        elif relation == 'right':
+            return [x + 0.3, y, z]
+
+        else:
+            return ref_position  # Default to reference position
+```
+
+## Ambiguity Resolution
+
+### Clarification Strategies
+
+Handle ambiguous commands:
+
+```python
+class AmbiguityResolver:
+    """
+    Resolve ambiguities in natural language commands.
+    """
+
+    def __init__(self, confidence_threshold=0.7):
+        self.confidence_threshold = confidence_threshold
+
+    def check_ambiguity(self, command: ActionCommand, slots: Dict) -> Dict:
+        """
+        Check for ambiguities in parsed command.
+
+        Args:
+            command: Parsed action command
+            slots: Extracted slots from slot filler
+
+        Returns:
+            Dictionary with ambiguity information
+        """
+        ambiguities = []
+
+        # Check intent confidence
+        if command.confidence < self.confidence_threshold:
+            ambiguities.append({
+                'type': 'intent_uncertainty',
+                'message': f"I'm not sure if you want me to {command.intent}",
+                'confidence': command.confidence
+            })
+
+        # Check for multiple objects
+        if slots['object'] and len(slots['object']) > 1:
+            ambiguities.append({
+                'type': 'multiple_objects',
+                'message': f"Which object do you mean: {', '.join([o['value'] for o in slots['object']])}?",
+                'options': [o['value'] for o in slots['object']]
+            })
+
+        # Check for missing critical information
+        if command.intent == 'pick_and_place':
+            if not command.object:
+                ambiguities.append({
+                    'type': 'missing_object',
+                    'message': "What should I pick up?"
+                })
+            if not command.location:
+                ambiguities.append({
+                    'type': 'missing_location',
+                    'message': "Where should I place it?"
+                })
+
+        elif command.intent == 'navigate_to':
+            if not command.location and not command.object:
+                ambiguities.append({
+                    'type': 'missing_destination',
+                    'message': "Where should I go?"
+                })
+
+        return {
+            'has_ambiguity': len(ambiguities) > 0,
+            'ambiguities': ambiguities,
+            'count': len(ambiguities)
+        }
+
+    def generate_clarification_question(self, ambiguity: Dict) -> str:
+        """Generate natural clarification question."""
+        if 'message' in ambiguity:
+            return ambiguity['message']
+
+        amb_type = ambiguity['type']
+
+        templates = {
+            'intent_uncertainty': "Could you clarify what you'd like me to do?",
+            'multiple_objects': "Which one do you mean?",
+            'missing_object': "What object should I work with?",
+            'missing_location': "Where should I move it?",
+            'missing_destination': "Where should I go?"
+        }
+
+        return templates.get(amb_type, "Could you please clarify?")
+```
+
+## Best Practices
+
+1. **Robust Intent Recognition**: Train on diverse command variations
+2. **Context Awareness**: Maintain conversation history and entity tracking
+3. **Graceful Degradation**: Handle low-confidence predictions with clarifications
+4. **Domain Adaptation**: Fine-tune language models for robotics domain
+5. **Safety Checks**: Validate commands before execution
+6. **User Feedback**: Learn from corrections and confirmations
+7. **Multi-lingual Support**: Consider language diversity in deployment environments
+
+Language and intent understanding enables humanoid robots to interact naturally with humans, interpreting commands and translating them into executable actions with appropriate context and spatial grounding.

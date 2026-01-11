@@ -1,0 +1,74 @@
+# Gazebo Setup
+
+## Overview
+
+Gazebo is the primary simulation environment for testing humanoid robots. This guide covers installing Gazebo Fortress, which integrates well with ROS 2 Humble.
+
+## Prerequisites
+
+- ROS 2 Humble installed (see [ROS 2 Installation](./ros2-installation))
+- Ubuntu 22.04 LTS
+- GPU with OpenGL 3.3+ support (recommended)
+
+## Installation Steps
+
+### 1. Install Gazebo Fortress
+
+```bash
+# Add Gazebo repository
+sudo apt-get update
+sudo apt-get install lsb-release wget gnupg
+
+sudo wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+
+# Install Gazebo Fortress
+sudo apt-get update
+sudo apt-get install gz-fortress
+```
+
+### 2. Install ROS 2 - Gazebo Bridge
+
+```bash
+# Install ros_gz packages
+sudo apt install ros-humble-ros-gz
+```
+
+### 3. Environment Configuration
+
+```bash
+# Source Gazebo environment
+echo "source /usr/share/gazebo/setup.sh" >> ~/.bashrc
+source ~/.bashrc
+```
+
+## Verification
+
+Test Gazebo installation:
+
+```bash
+# Launch Gazebo
+gz sim empty.sdf
+
+# Test ROS 2 integration
+ros2 launch ros_gz_sim gz_sim.launch.py gz_args:=empty.sdf
+```
+
+## Common Issues
+
+### GPU Acceleration Not Working
+
+If Gazebo runs slowly:
+
+```bash
+# Check OpenGL support
+glxinfo | grep "OpenGL version"
+
+# Use CPU rendering (fallback)
+export LIBGL_ALWAYS_SOFTWARE=1
+```
+
+## Next Steps
+
+- Continue to [Isaac Setup](./isaac-setup)
+- Return to [Lab Setup](./index)

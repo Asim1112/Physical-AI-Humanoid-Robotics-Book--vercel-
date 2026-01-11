@@ -1,0 +1,136 @@
+# NVIDIA Isaac Setup
+
+## Overview
+
+NVIDIA Isaac provides GPU-accelerated perception and navigation capabilities for robotics. This guide covers setting up Isaac ROS and Isaac Sim.
+
+## Prerequisites
+
+- ROS 2 Humble installed (see [ROS 2 Installation](./ros2-installation))
+- NVIDIA GPU with compute capability 7.0+ (RTX series recommended)
+- NVIDIA Driver 525.60.13 or later
+- Ubuntu 22.04 LTS
+
+## System Requirements
+
+### Hardware
+- NVIDIA GPU: RTX 2060 or better
+- RAM: 16GB minimum (32GB recommended)
+- Storage: 50GB free space
+
+### Software
+- Docker with NVIDIA Container Toolkit
+- NVIDIA Driver 525.60.13+
+
+## Installation Steps
+
+### 1. Install NVIDIA Driver
+
+```bash
+# Add NVIDIA driver repository
+sudo apt-get update
+sudo apt-get install ubuntu-drivers-common
+
+# Install recommended driver
+sudo ubuntu-drivers autoinstall
+
+# Reboot system
+sudo reboot
+
+# Verify installation
+nvidia-smi
+```
+
+### 2. Install Docker and NVIDIA Container Toolkit
+
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Add user to docker group
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Install NVIDIA Container Toolkit
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo systemctl restart docker
+```
+
+### 3. Install Isaac ROS
+
+```bash
+# Create workspace
+mkdir -p ~/isaac_ros_ws/src
+cd ~/isaac_ros_ws/src
+
+# Clone Isaac ROS Common
+git clone https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common.git
+
+# Pull Docker images
+cd ~/isaac_ros_ws/src/isaac_ros_common
+./scripts/run_dev.sh
+```
+
+### 4. Install Isaac Sim (Optional)
+
+Download from [NVIDIA Omniverse](https://developer.nvidia.com/isaac-sim):
+
+```bash
+# Download Omniverse Launcher
+wget https://install.launcher.omniverse.nvidia.com/installers/omniverse-launcher-linux.AppImage
+
+# Make executable and run
+chmod +x omniverse-launcher-linux.AppImage
+./omniverse-launcher-linux.AppImage
+
+# Install Isaac Sim from the launcher
+```
+
+## Verification
+
+### Test Isaac ROS
+
+```bash
+# Enter Isaac ROS container
+cd ~/isaac_ros_ws/src/isaac_ros_common
+./scripts/run_dev.sh
+
+# Inside container, verify installation
+ros2 pkg list | grep isaac
+```
+
+### Test GPU Acceleration
+
+```bash
+# Test CUDA
+docker run --rm --gpus all nvidia/cuda:12.0.0-base-ubuntu22.04 nvidia-smi
+```
+
+## Common Issues
+
+### GPU Not Detected
+
+```bash
+# Verify driver installation
+nvidia-smi
+
+# Check Docker GPU access
+docker run --rm --gpus all nvidia/cuda:12.0.0-base-ubuntu22.04 nvidia-smi
+```
+
+### Performance Issues
+
+- Ensure GPU is in performance mode
+- Check thermal throttling
+- Verify correct driver version
+
+## Next Steps
+
+- Return to [Lab Setup](./index)
+- Begin [Module 3: NVIDIA Isaac](../module-3-isaac/index)

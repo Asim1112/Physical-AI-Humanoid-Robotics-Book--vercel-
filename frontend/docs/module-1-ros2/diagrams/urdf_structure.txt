@@ -1,0 +1,241 @@
+# URDF Robot Description Structure
+
+## Basic URDF File Structure
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        URDF File                              │
+├─────────────────────────────────────────────────────────────────┤
+│  <?xml version="1.0" ?>                                         │
+│  <robot name="simple_humanoid">  ← Robot element with name    │
+│                                   │                             │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │                    LINKS                              │ │
+│    │                                                       │ │
+│    │  <link name="base_link">  ← Base/origin link         │ │
+│    │    <visual>... </visual>   ← How it appears visually  │ │
+│    │    <collision>... </collision> ← How it interacts    │ │
+│    │    <inertial>... </inertial> ← Physical properties   │ │
+│    │  </link>                                             │ │
+│    │                                                       │ │
+│    │  <link name="head">  ← Another link                  │ │
+│    │    <visual>... </visual>                              │ │
+│    │    <collision>... </collision>                        │ │
+│    │    <inertial>... </inertial>                          │ │
+│    │  </link>                                             │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                   │                             │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │                   JOINTS                              │ │
+│    │                                                       │ │
+│    │  <joint name="neck_joint" type="revolute">           │ │
+│    │    <parent link="base_link"/>  ← Connects to parent  │ │
+│    │    <child link="head"/>       ← Connects to child   │ │
+│    │    <origin xyz="0 0 0.4" rpy="0 0 0"/> ← Position │ │
+│    │    <axis xyz="0 1 0"/>       ← Rotation axis       │ │
+│    │    <limit ... />            ← Joint limits         │ │
+│    │  </joint>                                            │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                   │                             │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │                 MATERIALS                           │ │
+│    │  <material name="blue">                              │ │
+│    │    <color rgba="0 0 1 1"/>   ← Define material     │ │
+│    │  </material>                                          │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                   │                             │
+│  </robot>                                                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Link Structure Breakdown
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        LINK ELEMENT                           │
+├─────────────────────────────────────────────────────────────────┤
+│  <link name="example_link">                                   │
+│    │                                                          │
+│    ▼                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐│
+│  │   VISUAL        │  │   COLLISION     │  │   INERTIAL      ││
+│  │   (Display)     │  │   (Physics)     │  │   (Dynamics)    ││
+│  │                 │  │                 │  │                 ││
+│  │ <geometry>      │  │ <geometry>      │  │ <mass>          ││
+│  │   <box size=    │  │   <box size=    │  │   value="1.0"/> ││
+│  │     "0.5 0.3    │  │     "0.5 0.3    │  │ <origin>        ││
+│  │     0.6"/>     │  │     0.6"/>     │  │   xyz="0 0 0"   ││
+│  │ </geometry>     │  │ </geometry>     │  │   rpy="0 0 0"/> ││
+│  │ <material>      │  │                 │  │ <inertia>       ││
+│  │   name="blue"/> │  │                 │  │   ixx="0.1"     ││
+│  │                 │  │                 │  │   ixy="0.0"     ││
+│  │                 │  │                 │  │   ixz="0.0"     ││
+│  │                 │  │                 │  │   iyy="0.1"     ││
+│  │                 │  │                 │  │   iyz="0.0"     ││
+│  │                 │  │                 │  │   izz="0.1"/>   ││
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘│
+│                                                                 │
+│  Purpose:                                                      │
+│  - Visual: How the link appears in RViz and simulation        │
+│  - Collision: How the link interacts in physics simulation    │
+│  - Inertial: Physical properties for dynamics calculations    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Joint Structure Breakdown
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        JOINT ELEMENT                          │
+├─────────────────────────────────────────────────────────────────┤
+│  <joint name="example_joint" type="revolute">                 │
+│    │                                                          │
+│    ▼                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐│
+│  │ PARENT/CHILD    │  │   ORIGIN        │  │    AXIS         ││
+│  │   CONNECTIONS   │  │   POSITION      │  │   DIRECTION     ││
+│  │                 │  │                 │  │                 ││
+│  │ <parent         │  │ <origin         │  │ <axis          ││
+│  │   link="parent_ │  │   xyz="0.2 0.0  │  │   xyz="0 1 0"/>││
+│  │   link"/>       │  │   0.3"          │  └─────────────────┘│
+│  │ <child          │  │   rpy="0 0 0"/> │                     │
+│  │   link="child_  │  └─────────────────┘                     │
+│  │   link"/>       │                                          │
+│  └─────────────────┘                                          │
+│    │              │                                           │
+│    ▼              ▼                                           │
+│  ┌─────────────────┐  ┌─────────────────┐                     │
+│  │    LIMITS       │  │   DYNAMICS      │                     │
+│  │   (Constraints) │  │   (Optional)    │                     │
+│  │                 │  │                 │                     │
+│  │ <limit          │  │ <dynamics       │                     │
+│  │   lower="-1.57" │  │   damping="0.1" │                     │
+│  │   upper="1.57"  │  │   friction=     │                     │
+│  │   effort="50"   │  │   "0.0"/>       │                     │
+│  │   velocity="2"/>│  └─────────────────┘                     │
+│  └─────────────────┘                                          │
+│                                                                 │
+│  Joint Types:                                                  │
+│  - fixed: No movement                                          │
+│  - revolute: Rotational movement with limits                   │
+│  - continuous: Unlimited rotational movement                   │
+│  - prismatic: Linear sliding movement                          │
+│  - floating: 6 DOF movement (rarely used)                     │
+│  - planar: Movement in a plane                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Humanoid Robot URDF Hierarchy Example
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                Humanoid Robot Kinematic Tree                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Kinematic Hierarchy (Tree Structure):                         │
+│                                                                 │
+│                           base_link (root)                     │
+│                           /     |      \                       │
+│                          /      |       \                      │
+│                   ┌────────┐ ┌──────┐ ┌──────────┐            │
+│                   │  head  │ │ torso│ │  pelvis  │            │
+│                   └────────┘ └──────┘ └──────────┘            │
+│                      |          |         /      \             │
+│                      |          |        /        \            │
+│                 ┌─────────┐ ┌──────┐ ┌─────┐  ┌─────┐        │
+│                 │neck_jnt │ │chest │ │left │  │right│        │
+│                 └─────────┘ │jnt   │ │hip  │  │hip  │        │
+│                   /    \    └──────┘ └─────┘  └─────┘        │
+│                  /      \      |        |        |           │
+│           ┌─────────┐ ┌─────────┐      |        |           │
+│           │left_eye │ │right_eye│      |        |           │
+│           └─────────┘ └─────────┘      |        |           │
+│                                        |        |           │
+│                           ┌─────────────┘        └───────────┐│
+│                           |                                  ││
+│                    ┌─────────────┐                    ┌─────────────┐│
+│                    │ left_leg    │                    │ right_leg   ││
+│                    │ chain       │                    │ chain       ││
+│                    └─────────────┘                    └─────────────┘│
+│                           |                                  |      │
+│        ┌──────────────────┼──────────────────┐ ┌─────────────┼──────┘│
+│        |                  |                  | |             |       │
+│  ┌──────────┐       ┌──────────┐      ┌──────────┐    ┌──────────┐ │
+│  │ left_thigh│      │left_shank│      │right_thigh│    │right_shank│ │
+│  └──────────┘      └──────────┘      └──────────┘    └──────────┘ │
+│        |                 |                  |                 |     │
+│        |                 |                  |                 |     │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐ │
+│  │left_knee │      │left_foot │      │right_knee│      │right_foot│ │
+│  │joint     │      │           │      │joint     │      │          │ │
+│  └──────────┘      └──────────┘      └──────────┘      └──────────┘ │
+│                                                                 │
+│  Coordinate Frames:                                              │
+│  Each link has its own coordinate frame with:                  │
+│  - X: Forward (anterior)                                        │
+│  - Y: Left (lateral)                                            │
+│  - Z: Up (superior)                                             │
+│                                                                 │
+│  Joint Connections:                                              │
+│  - Each joint connects exactly two links                        │
+│  - One parent, one child                                        │
+│  - Forms a directed graph (no cycles)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Complete URDF with Xacro Example
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   URDF with Xacro Structure                   │
+├─────────────────────────────────────────────────────────────────┤
+│  <?xml version="1.0"?>                                         │
+│  <robot xmlns:xacro="http://www.ros.org/wiki/xacro"           │
+│         name="humanoid_with_xacro">                            │
+│                                                                 │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │              XACRO PROPERTIES                         │ │
+│    │  <xacro:property name="M_PI" value="3.14159"/>       │ │
+│    │  <xacro:property name="link_width" value="0.1"/>     │ │
+│    │  <xacro:property name="link_height" value="0.3"/>    │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │              XACRO MACROS                             │ │
+│    │  <xacro:macro name="simple_link"                     │ │
+│    │           params="name xyz_size">                     │ │
+│    │    <link name="${name}">                             │ │
+│    │      <visual>                                        │ │
+│    │        <geometry>                                    │ │
+│    │          <box size="${xyz_size}"/>                  │ │
+│    │        </geometry>                                   │ │
+│    │      </visual>                                       │ │
+│    │    </link>                                           │ │
+│    │  </xacro:macro>                                       │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │         MACRO INSTANTIATION                         │ │
+│    │  <xacro:simple_link name="left_arm"                  │ │
+│    │                   xyz_size="0.1 0.1 0.5"/>          │ │
+│    │  <xacro:simple_link name="right_arm"                 │ │
+│    │                   xyz_size="0.1 0.1 0.5"/>          │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│    ┌─────────────────────────────────────────────────────────┐ │
+│    │              REGULAR URDF                           │ │
+│    │  <joint name="left_shoulder" type="revolute">      │ │
+│    │    <parent link="torso"/>                           │ │
+│    │    <child link="left_arm"/>                         │ │
+│    │    ...                                              │ │
+│    │  </joint>                                           │ │
+│    └─────────────────────────────────────────────────────────┘ │
+│  </robot>                                                     │
+└─────────────────────────────────────────────────────────────────┘
+
+Benefits of Xacro:
+- Reuse: Define once, use multiple times
+- Variables: Avoid repetition of values
+- Math: Perform calculations within URDF
+- Modularity: Include other Xacro files
+```

@@ -1,0 +1,209 @@
+# Module 3 Exercises: AI-Robot Brain (NVIDIA Isaac)
+
+## Learning Objectives
+
+By completing these exercises, you will be able to:
+- Implement AI perception pipelines for humanoid robots
+- Configure and run visual SLAM systems
+- Design bipedal navigation algorithms
+- Apply machine learning techniques to robot control
+- Execute sim-to-real transfer of learned behaviors
+- Integrate NVIDIA Isaac components for AI-powered robotics
+
+## Exercise 1: Basic AI Pipeline Implementation
+
+### Objective
+Implement a basic AI pipeline that integrates perception, planning, and control components for humanoid robot navigation.
+
+### Tasks
+1. Create a ROS 2 node that subscribes to camera, IMU, and LiDAR data
+2. Implement feature detection and tracking using ORB or SIFT
+3. Design a simple obstacle avoidance algorithm
+4. Integrate joint control commands based on perception results
+5. Validate the pipeline with performance metrics
+
+### Requirements
+- Pipeline must run at minimum 30Hz for perception
+- Obstacle detection must identify objects within 3m
+- Control commands must be generated within 50ms
+- System must maintain stability during operation
+
+### Validation Steps
+- Test on static scene with known objects
+- Validate obstacle avoidance in simple environment
+- Measure computational performance
+- Verify stability during navigation
+
+## Exercise 2: Visual SLAM for Humanoid Robots
+
+### Objective
+Implement a visual SLAM system specifically designed for humanoid robot navigation.
+
+### Tasks
+1. Configure stereo camera setup for depth estimation
+2. Implement feature detection and matching pipeline
+3. Design pose estimation and tracking system
+4. Create 3D map building and maintenance
+5. Integrate loop closure detection
+
+### Requirements
+- System must maintain consistent pose estimates
+- Map building must handle dynamic environments
+- Computational load must be manageable on robot hardware
+- System must handle tracking failure and recovery
+
+### Validation Steps
+- Test on pre-recorded dataset with ground truth
+- Validate mapping accuracy in known environment
+- Measure localization drift over time
+- Test robustness to lighting changes
+
+## Exercise 3: Bipedal Path Planning
+
+### Objective
+Develop a path planning system that accounts for bipedal robot constraints.
+
+### Tasks
+1. Implement global path planner with bipedal-specific constraints
+2. Design local obstacle avoidance for bipedal navigation
+3. Create footstep planning algorithm
+4. Integrate balance-aware navigation
+5. Validate path feasibility for bipedal locomotion
+
+### Requirements
+- Paths must be dynamically feasible for bipedal robots
+- System must maintain balance during navigation
+- Planning must handle uneven terrain
+- Footstep planning must ensure stability
+
+### Validation Steps
+- Test on simulation with various terrain types
+- Validate balance maintenance during path following
+- Measure path optimality and safety
+- Test obstacle avoidance effectiveness
+
+## Exercise 4: Reinforcement Learning for Locomotion
+
+### Objective
+Train a reinforcement learning policy for humanoid locomotion using Isaac Gym.
+
+### Tasks
+1. Set up Isaac Gym environment for humanoid locomotion
+2. Define reward function for stable walking
+3. Implement PPO or similar RL algorithm
+4. Train policy in simulation with domain randomization
+5. Transfer policy to real robot (simulated or physical)
+
+### Requirements
+- Training must converge to stable locomotion
+- Policy must handle various terrain conditions
+- Transfer to real robot must maintain performance
+- Training must be sample-efficient
+
+### Validation Steps
+- Measure walking speed and stability
+- Test on various terrain types
+- Validate sim-to-real transfer performance
+- Assess robustness to disturbances
+
+## Exercise 5: Multi-Sensor Fusion
+
+### Objective
+Implement sensor fusion combining vision, IMU, and LiDAR for robust perception.
+
+### Tasks
+1. Design Kalman filter or particle filter for sensor fusion
+2. Implement temporal and spatial calibration
+3. Handle sensor failures and uncertainties
+4. Integrate fused data into navigation system
+5. Validate robustness to individual sensor failures
+
+### Requirements
+- System must handle asynchronous sensor data
+- Fusion must improve perception accuracy
+- System must maintain operation with partial sensor data
+- Computational overhead must be minimal
+
+### Validation Steps
+- Test with individual sensors disabled
+- Validate accuracy improvement over single sensors
+- Measure temporal consistency
+- Assess robustness to sensor noise
+
+## Exercise 6: Learning from Demonstration
+
+### Objective
+Implement imitation learning to teach humanoid robot behaviors from human demonstrations.
+
+### Tasks
+1. Collect human demonstration data for target behavior
+2. Implement behavior cloning algorithm
+3. Design state and action representations
+4. Train policy to imitate demonstrated behavior
+5. Validate learned behavior in simulation and reality
+
+### Requirements
+- Demonstration collection must capture essential features
+- Learned policy must generalize to new situations
+- Training must be efficient with limited demonstrations
+- Transfer to robot must maintain behavior quality
+
+### Validation Steps
+- Measure behavior similarity to demonstrations
+- Test generalization to new scenarios
+- Validate on physical or realistic simulation
+- Assess sample efficiency of learning
+
+## Learning Checkpoints
+
+### Checkpoint 1: AI Pipeline Fundamentals
+- [ ] Understand perception, planning, and control integration
+- [ ] Can implement basic feature detection and tracking
+- [ ] Know how to design modular AI systems
+- [ ] Understand real-time performance requirements
+
+### Checkpoint 2: Visual SLAM for Robotics
+- [ ] Understand SLAM pipeline components
+- [ ] Can implement feature-based tracking
+- [ ] Know how to build and maintain maps
+- [ ] Understand pose estimation and optimization
+
+### Checkpoint 3: Bipedal Navigation
+- [ ] Understand bipedal-specific navigation challenges
+- [ ] Can implement footstep planning algorithms
+- [ ] Know how to maintain balance during navigation
+- [ ] Understand path planning with dynamic constraints
+
+### Checkpoint 4: Robot Learning
+- [ ] Understand reinforcement learning for robotics
+- [ ] Can implement sim-to-real transfer techniques
+- [ ] Know how to design reward functions
+- [ ] Understand domain randomization concepts
+
+### Checkpoint 5: Isaac Platform Integration
+- [ ] Can configure Isaac ROS packages
+- [ ] Understand TensorRT optimization
+- [ ] Know how to set up Isaac learning environments
+- [ ] Understand Isaac hardware acceleration
+
+## Challenge Exercises
+
+### Challenge 1: Adaptive Navigation
+Implement a navigation system that adapts its behavior based on environmental conditions and robot state, using online learning techniques.
+
+### Challenge 2: Multi-Modal Perception
+Create a perception system that effectively combines visual, auditory, and tactile information for enhanced environmental understanding.
+
+### Challenge 3: Human-Robot Collaboration
+Design a learning system that enables safe and effective collaboration between humans and humanoid robots in shared workspaces.
+
+## Resources and References
+
+- NVIDIA Isaac ROS Documentation: https://nvidia-isaac-ros.github.io/
+- Isaac Gym Documentation: https://developer.nvidia.com/isaac-gym
+- ROS 2 Navigation Stack: https://navigation.ros.org/
+- Deep RL for Robotics: [Additional references to be added]
+
+## Solutions and Guidance
+
+Solutions for these exercises will be provided in the instructor materials. Students are encouraged to work through the exercises independently before consulting solutions. For additional support, refer to the Isaac examples provided in the module.

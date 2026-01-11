@@ -1,0 +1,933 @@
+# Multimodal Integration for Humanoid Robots
+
+## Overview
+
+Multimodal integration combines vision, language, proprioception, and other sensory modalities to create a comprehensive understanding of the robot's state and environment. This chapter explores advanced techniques for fusing multiple information sources, enabling humanoid robots to make informed decisions based on diverse inputs.
+
+## Multimodal Fusion Architecture
+
+### System Overview
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                  MULTIMODAL INTEGRATION SYSTEM                  │
+│                                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │  VISION  │  │ LANGUAGE │  │  PROPRIO │  │  HAPTIC  │      │
+│  │          │  │          │  │  CEPTION │  │          │      │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘      │
+│       │             │              │             │             │
+│       ▼             ▼              ▼             ▼             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │  VISUAL  │  │ LANGUAGE │  │  JOINT   │  │  FORCE   │      │
+│  │ ENCODER  │  │ ENCODER  │  │ ENCODER  │  │ ENCODER  │      │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘      │
+│       │             │              │             │             │
+│       └─────────────┼──────────────┼─────────────┘             │
+│                     ▼              ▼                           │
+│            ┌─────────────────────────┐                         │
+│            │   MULTIMODAL FUSION     │                         │
+│            │                         │                         │
+│            │  • Cross-Attention      │                         │
+│            │  • Feature Alignment    │                         │
+│            │  • Temporal Sync        │                         │
+│            │  • Uncertainty Handling │                         │
+│            └────────────┬────────────┘                         │
+│                         ▼                                       │
+│            ┌─────────────────────────┐                         │
+│            │   UNIFIED               │                         │
+│            │   REPRESENTATION        │                         │
+│            └────────────┬────────────┘                         │
+│                         ▼                                       │
+│            ┌─────────────────────────┐                         │
+│            │   ACTION GENERATION     │                         │
+│            └─────────────────────────┘                         │
+└────────────────────────────────────────────────────────────────┘
+```
+
+## Cross-Modal Attention Mechanisms
+
+### Transformer-Based Multimodal Fusion
+
+Implement cross-attention between different modalities:
+
+```python
+import torch
+import torch.nn as nn
+from typing import Dict, List, Optional
+
+class MultimodalTransformer(nn.Module):
+    """
+    Transformer-based multimodal fusion for VLA systems.
+    Supports vision, language, and proprioceptive inputs.
+    """
+
+    def __init__(
+        self,
+        hidden_dim: int = 768,
+        num_heads: int = 12,
+        num_layers: int = 6,
+        dropout: float = 0.1
+    ):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+
+        # Modality-specific projections
+        self.vision_projection = nn.Linear(2048, hidden_dim)  # From ResNet
+        self.language_projection = nn.Linear(768, hidden_dim)  # From BERT
+        self.proprio_projection = nn.Linear(64, hidden_dim)   # Joint states + IMU
+        self.haptic_projection = nn.Linear(32, hidden_dim)    # Force/torque sensors
+
+        # Positional encodings for each modality
+        self.vision_pos_encoding = nn.Parameter(torch.randn(1, 196, hidden_dim))  # 14x14 patches
+        self.language_pos_encoding = nn.Parameter(torch.randn(1, 512, hidden_dim))
+        self.proprio_pos_encoding = nn.Parameter(torch.randn(1, 100, hidden_dim))
+
+        # Modality embeddings (learnable tokens to identify modality type)
+        self.modality_embeddings = nn.ParameterDict({
+            'vision': nn.Parameter(torch.randn(1, 1, hidden_dim)),
+            'language': nn.Parameter(torch.randn(1, 1, hidden_dim)),
+            'proprio': nn.Parameter(torch.randn(1, 1, hidden_dim)),
+            'haptic': nn.Parameter(torch.randn(1, 1, hidden_dim))
+        })
+
+        # Cross-modal transformer
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim,
+            nhead=num_heads,
+            dim_feedforward=hidden_dim * 4,
+            dropout=dropout,
+            activation='gelu',
+            batch_first=True,
+            norm_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Output projection
+        self.output_projection = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(
+        self,
+        vision_features: Optional[torch.Tensor] = None,
+        language_features: Optional[torch.Tensor] = None,
+        proprio_features: Optional[torch.Tensor] = None,
+        haptic_features: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Fuse multiple modalities.
+
+        Args:
+            vision_features: [batch, seq_len, vision_dim]
+            language_features: [batch, seq_len, language_dim]
+            proprio_features: [batch, seq_len, proprio_dim]
+            haptic_features: [batch, seq_len, haptic_dim]
+            attention_mask: Optional attention mask
+
+        Returns:
+            Dictionary with fused features and modality-specific outputs
+        """
+        batch_size = (
+            vision_features.size(0) if vision_features is not None
+            else language_features.size(0) if language_features is not None
+            else proprio_features.size(0)
+        )
+
+        # Collect all modality sequences
+        modality_sequences = []
+        modality_masks = []
+
+        # Process vision
+        if vision_features is not None:
+            vision_proj = self.vision_projection(vision_features)
+            seq_len = vision_proj.size(1)
+            vision_proj = vision_proj + self.vision_pos_encoding[:, :seq_len, :]
+            vision_proj = vision_proj + self.modality_embeddings['vision']
+            modality_sequences.append(vision_proj)
+            modality_masks.append(torch.ones(batch_size, seq_len, device=vision_proj.device))
+
+        # Process language
+        if language_features is not None:
+            language_proj = self.language_projection(language_features)
+            seq_len = language_proj.size(1)
+            language_proj = language_proj + self.language_pos_encoding[:, :seq_len, :]
+            language_proj = language_proj + self.modality_embeddings['language']
+            modality_sequences.append(language_proj)
+            modality_masks.append(torch.ones(batch_size, seq_len, device=language_proj.device))
+
+        # Process proprioception
+        if proprio_features is not None:
+            proprio_proj = self.proprio_projection(proprio_features)
+            seq_len = proprio_proj.size(1)
+            proprio_proj = proprio_proj + self.proprio_pos_encoding[:, :seq_len, :]
+            proprio_proj = proprio_proj + self.modality_embeddings['proprio']
+            modality_sequences.append(proprio_proj)
+            modality_masks.append(torch.ones(batch_size, seq_len, device=proprio_proj.device))
+
+        # Process haptic
+        if haptic_features is not None:
+            haptic_proj = self.haptic_projection(haptic_features)
+            haptic_proj = haptic_proj + self.modality_embeddings['haptic']
+            modality_sequences.append(haptic_proj)
+            modality_masks.append(torch.ones(batch_size, haptic_proj.size(1), device=haptic_proj.device))
+
+        # Concatenate all modalities
+        fused_sequence = torch.cat(modality_sequences, dim=1)  # [batch, total_seq_len, hidden_dim]
+
+        # Create attention mask if needed
+        if attention_mask is None:
+            attention_mask = torch.cat(modality_masks, dim=1)
+
+        # Apply transformer
+        fused_output = self.transformer(
+            fused_sequence,
+            src_key_padding_mask=(attention_mask == 0)
+        )
+
+        # Project output
+        fused_output = self.output_projection(fused_output)
+
+        # Split back into modality-specific outputs
+        outputs = {
+            'fused': fused_output,
+            'pooled': fused_output.mean(dim=1)  # Global pooling
+        }
+
+        # Extract modality-specific representations
+        start_idx = 0
+        if vision_features is not None:
+            end_idx = start_idx + vision_features.size(1)
+            outputs['vision'] = fused_output[:, start_idx:end_idx, :]
+            start_idx = end_idx
+
+        if language_features is not None:
+            end_idx = start_idx + language_features.size(1)
+            outputs['language'] = fused_output[:, start_idx:end_idx, :]
+            start_idx = end_idx
+
+        if proprio_features is not None:
+            end_idx = start_idx + proprio_features.size(1)
+            outputs['proprio'] = fused_output[:, start_idx:end_idx, :]
+            start_idx = end_idx
+
+        if haptic_features is not None:
+            outputs['haptic'] = fused_output[:, start_idx:, :]
+
+        return outputs
+```
+
+## Temporal Alignment
+
+### Synchronization of Asynchronous Modalities
+
+Handle different sensor update rates:
+
+```python
+from collections import deque
+import time
+
+class TemporalAligner:
+    """
+    Align multimodal inputs with different sampling rates.
+    """
+
+    def __init__(self, buffer_size: int = 100):
+        self.buffers = {
+            'vision': deque(maxlen=buffer_size),
+            'language': deque(maxlen=buffer_size),
+            'proprio': deque(maxlen=buffer_size),
+            'haptic': deque(maxlen=buffer_size)
+        }
+
+        # Expected update rates (Hz)
+        self.update_rates = {
+            'vision': 30.0,
+            'language': 10.0,  # Commands come sporadically
+            'proprio': 100.0,
+            'haptic': 100.0
+        }
+
+    def add_sample(self, modality: str, data: torch.Tensor, timestamp: float):
+        """Add a sample to the appropriate buffer."""
+        self.buffers[modality].append({
+            'data': data,
+            'timestamp': timestamp
+        })
+
+    def get_synchronized_batch(
+        self,
+        target_timestamp: float,
+        time_window: float = 0.1
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Get synchronized batch of multimodal data.
+
+        Args:
+            target_timestamp: Target synchronization time
+            time_window: Tolerance window for synchronization (seconds)
+
+        Returns:
+            Dictionary of synchronized modality data
+        """
+        synchronized = {}
+
+        for modality, buffer in self.buffers.items():
+            if not buffer:
+                synchronized[modality] = None
+                continue
+
+            # Find closest sample within time window
+            closest_sample = None
+            min_time_diff = float('inf')
+
+            for sample in buffer:
+                time_diff = abs(sample['timestamp'] - target_timestamp)
+                if time_diff < min_time_diff and time_diff <= time_window:
+                    min_time_diff = time_diff
+                    closest_sample = sample
+
+            if closest_sample is not None:
+                synchronized[modality] = closest_sample['data']
+            else:
+                # Interpolate if no exact match
+                synchronized[modality] = self._interpolate_sample(
+                    modality, target_timestamp
+                )
+
+        return synchronized
+
+    def _interpolate_sample(
+        self,
+        modality: str,
+        target_timestamp: float
+    ) -> Optional[torch.Tensor]:
+        """Interpolate sample at target timestamp."""
+        buffer = self.buffers[modality]
+
+        if len(buffer) < 2:
+            return None
+
+        # Find samples before and after target timestamp
+        before = None
+        after = None
+
+        for sample in buffer:
+            if sample['timestamp'] <= target_timestamp:
+                if before is None or sample['timestamp'] > before['timestamp']:
+                    before = sample
+            if sample['timestamp'] >= target_timestamp:
+                if after is None or sample['timestamp'] < after['timestamp']:
+                    after = sample
+
+        if before is None or after is None:
+            return None
+
+        # Linear interpolation
+        t_diff = after['timestamp'] - before['timestamp']
+        if t_diff == 0:
+            return before['data']
+
+        alpha = (target_timestamp - before['timestamp']) / t_diff
+        interpolated = (1 - alpha) * before['data'] + alpha * after['data']
+
+        return interpolated
+```
+
+## Uncertainty-Aware Fusion
+
+### Multimodal Fusion with Uncertainty Quantification
+
+Incorporate uncertainty estimates in fusion:
+
+```python
+class UncertaintyAwareFusion(nn.Module):
+    """
+    Multimodal fusion that accounts for modality-specific uncertainties.
+    """
+
+    def __init__(self, hidden_dim: int = 768):
+        super().__init__()
+
+        # Uncertainty estimation networks for each modality
+        self.vision_uncertainty = nn.Sequential(
+            nn.Linear(hidden_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Softplus()  # Ensure positive uncertainty
+        )
+
+        self.language_uncertainty = nn.Sequential(
+            nn.Linear(hidden_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Softplus()
+        )
+
+        self.proprio_uncertainty = nn.Sequential(
+            nn.Linear(hidden_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Softplus()
+        )
+
+        # Fusion network
+        self.fusion_network = nn.Sequential(
+            nn.Linear(hidden_dim * 3, hidden_dim * 2),
+            nn.LayerNorm(hidden_dim * 2),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim * 2, hidden_dim)
+        )
+
+    def forward(
+        self,
+        vision_features: torch.Tensor,
+        language_features: torch.Tensor,
+        proprio_features: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Fuse features with uncertainty weighting.
+
+        Args:
+            vision_features: [batch, hidden_dim]
+            language_features: [batch, hidden_dim]
+            proprio_features: [batch, hidden_dim]
+
+        Returns:
+            Dictionary with fused features and uncertainties
+        """
+        # Estimate uncertainties
+        vision_unc = self.vision_uncertainty(vision_features)  # [batch, 1]
+        language_unc = self.language_uncertainty(language_features)
+        proprio_unc = self.proprio_uncertainty(proprio_features)
+
+        # Compute weights (inverse uncertainty)
+        vision_weight = 1.0 / (vision_unc + 1e-6)
+        language_weight = 1.0 / (language_unc + 1e-6)
+        proprio_weight = 1.0 / (proprio_unc + 1e-6)
+
+        # Normalize weights
+        total_weight = vision_weight + language_weight + proprio_weight
+        vision_weight = vision_weight / total_weight
+        language_weight = language_weight / total_weight
+        proprio_weight = proprio_weight / total_weight
+
+        # Weighted fusion
+        weighted_vision = vision_features * vision_weight
+        weighted_language = language_features * language_weight
+        weighted_proprio = proprio_features * proprio_weight
+
+        # Concatenate and fuse
+        concatenated = torch.cat([
+            weighted_vision,
+            weighted_language,
+            weighted_proprio
+        ], dim=-1)
+
+        fused_features = self.fusion_network(concatenated)
+
+        return {
+            'fused': fused_features,
+            'vision_uncertainty': vision_unc,
+            'language_uncertainty': language_unc,
+            'proprio_uncertainty': proprio_unc,
+            'vision_weight': vision_weight,
+            'language_weight': language_weight,
+            'proprio_weight': proprio_weight
+        }
+```
+
+## Hierarchical Multimodal Processing
+
+### Multi-Level Fusion Architecture
+
+Fuse at multiple levels of abstraction:
+
+```python
+class HierarchicalMultimodalFusion(nn.Module):
+    """
+    Hierarchical fusion at multiple levels of abstraction.
+    """
+
+    def __init__(self, hidden_dim: int = 768):
+        super().__init__()
+
+        # Low-level fusion (feature-level)
+        self.low_level_fusion = nn.MultiheadAttention(
+            embed_dim=hidden_dim,
+            num_heads=8,
+            batch_first=True
+        )
+
+        # Mid-level fusion (semantic-level)
+        self.mid_level_fusion = nn.MultiheadAttention(
+            embed_dim=hidden_dim,
+            num_heads=8,
+            batch_first=True
+        )
+
+        # High-level fusion (decision-level)
+        self.high_level_fusion = nn.Sequential(
+            nn.Linear(hidden_dim * 3, hidden_dim * 2),
+            nn.LayerNorm(hidden_dim * 2),
+            nn.GELU(),
+            nn.Linear(hidden_dim * 2, hidden_dim)
+        )
+
+        # Level-specific processing
+        self.vision_processor = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(hidden_dim, 8, hidden_dim * 4, batch_first=True),
+            num_layers=2
+        )
+
+        self.language_processor = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(hidden_dim, 8, hidden_dim * 4, batch_first=True),
+            num_layers=2
+        )
+
+        self.proprio_processor = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(hidden_dim, 8, hidden_dim * 4, batch_first=True),
+            num_layers=2
+        )
+
+    def forward(
+        self,
+        vision_features: torch.Tensor,
+        language_features: torch.Tensor,
+        proprio_features: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Hierarchical fusion across multiple levels.
+
+        Args:
+            vision_features: [batch, seq_len, hidden_dim]
+            language_features: [batch, seq_len, hidden_dim]
+            proprio_features: [batch, seq_len, hidden_dim]
+
+        Returns:
+            Multi-level fused representations
+        """
+        # Low-level fusion (early fusion at feature level)
+        # Concatenate sequences
+        low_level_seq = torch.cat([
+            vision_features,
+            language_features,
+            proprio_features
+        ], dim=1)
+
+        # Self-attention across all modalities
+        low_level_fused, _ = self.low_level_fusion(
+            low_level_seq, low_level_seq, low_level_seq
+        )
+
+        # Mid-level fusion (process each modality then fuse)
+        vision_processed = self.vision_processor(vision_features)
+        language_processed = self.language_processor(language_features)
+        proprio_processed = self.proprio_processor(proprio_features)
+
+        # Pool each modality
+        vision_pooled = vision_processed.mean(dim=1)
+        language_pooled = language_processed.mean(dim=1)
+        proprio_pooled = proprio_processed.mean(dim=1)
+
+        # Cross-modal attention for mid-level
+        mid_level_seq = torch.stack([
+            vision_pooled,
+            language_pooled,
+            proprio_pooled
+        ], dim=1)  # [batch, 3, hidden_dim]
+
+        mid_level_fused, _ = self.mid_level_fusion(
+            mid_level_seq, mid_level_seq, mid_level_seq
+        )
+
+        # High-level fusion (late fusion at decision level)
+        high_level_input = torch.cat([
+            vision_pooled,
+            language_pooled,
+            proprio_pooled
+        ], dim=-1)
+
+        high_level_fused = self.high_level_fusion(high_level_input)
+
+        return {
+            'low_level': low_level_fused.mean(dim=1),  # Pool over sequence
+            'mid_level': mid_level_fused.mean(dim=1),
+            'high_level': high_level_fused,
+            'vision': vision_pooled,
+            'language': language_pooled,
+            'proprio': proprio_pooled
+        }
+```
+
+## Attention Mechanisms for Multimodal Fusion
+
+### Gated Fusion with Attention
+
+Use attention to dynamically weight modalities:
+
+```python
+class GatedMultimodalFusion(nn.Module):
+    """
+    Gated fusion mechanism that learns to weight modalities.
+    """
+
+    def __init__(self, hidden_dim: int = 768, num_modalities: int = 3):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+        self.num_modalities = num_modalities
+
+        # Gating network
+        self.gate_network = nn.Sequential(
+            nn.Linear(hidden_dim * num_modalities, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, num_modalities),
+            nn.Softmax(dim=-1)
+        )
+
+        # Modality-specific transformations
+        self.modality_transforms = nn.ModuleList([
+            nn.Linear(hidden_dim, hidden_dim)
+            for _ in range(num_modalities)
+        ])
+
+        # Output projection
+        self.output_projection = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU()
+        )
+
+    def forward(self, modality_features: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Fuse modalities with learned gating.
+
+        Args:
+            modality_features: List of [batch, hidden_dim] tensors
+
+        Returns:
+            Gated fusion result
+        """
+        batch_size = modality_features[0].size(0)
+
+        # Stack modalities
+        stacked_features = torch.stack(modality_features, dim=1)  # [batch, num_mod, hidden_dim]
+
+        # Compute gates
+        concatenated = torch.cat(modality_features, dim=-1)  # [batch, hidden_dim * num_mod]
+        gates = self.gate_network(concatenated)  # [batch, num_modalities]
+
+        # Transform each modality
+        transformed = []
+        for i, (feat, transform) in enumerate(zip(modality_features, self.modality_transforms)):
+            transformed.append(transform(feat))
+
+        transformed = torch.stack(transformed, dim=1)  # [batch, num_mod, hidden_dim]
+
+        # Apply gates
+        gates_expanded = gates.unsqueeze(-1)  # [batch, num_mod, 1]
+        gated_features = transformed * gates_expanded  # [batch, num_mod, hidden_dim]
+
+        # Sum across modalities
+        fused = gated_features.sum(dim=1)  # [batch, hidden_dim]
+
+        # Output projection
+        output = self.output_projection(fused)
+
+        return {
+            'fused': output,
+            'gates': gates,
+            'transformed': transformed
+        }
+```
+
+## Complete Multimodal VLA System
+
+### End-to-End Integration
+
+Integrate all components into a complete system:
+
+```python
+class MultimodalVLASystem(nn.Module):
+    """
+    Complete multimodal VLA system for humanoid robots.
+    """
+
+    def __init__(
+        self,
+        vision_encoder_type: str = 'vit',
+        language_encoder_type: str = 'bert',
+        hidden_dim: int = 768,
+        action_dim: int = 12,
+        use_uncertainty: bool = True,
+        use_hierarchical: bool = True
+    ):
+        super().__init__()
+
+        # Encoders
+        from ..vla_paradigm import VisionEncoder, LanguageEncoder
+
+        self.vision_encoder = VisionEncoder(
+            encoder_type=vision_encoder_type,
+            output_dim=hidden_dim
+        )
+
+        self.language_encoder = LanguageEncoder(
+            model_type=language_encoder_type,
+            output_dim=hidden_dim
+        )
+
+        self.proprio_encoder = nn.Sequential(
+            nn.Linear(64, 256),  # 64-dim proprioceptive input
+            nn.ReLU(),
+            nn.Linear(256, hidden_dim)
+        )
+
+        # Temporal alignment
+        self.temporal_aligner = TemporalAligner()
+
+        # Fusion modules
+        if use_hierarchical:
+            self.fusion = HierarchicalMultimodalFusion(hidden_dim)
+        elif use_uncertainty:
+            self.fusion = UncertaintyAwareFusion(hidden_dim)
+        else:
+            self.fusion = MultimodalTransformer(hidden_dim)
+
+        # Action decoder
+        self.action_decoder = nn.Sequential(
+            nn.Linear(hidden_dim, 512),
+            nn.LayerNorm(512),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 256),
+            nn.LayerNorm(256),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, action_dim),
+            nn.Tanh()  # Actions in [-1, 1]
+        )
+
+    def forward(
+        self,
+        images: torch.Tensor,
+        text_instructions: List[str],
+        proprio_states: torch.Tensor,
+        timestamps: Optional[torch.Tensor] = None
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Forward pass through multimodal VLA system.
+
+        Args:
+            images: [batch, 3, H, W]
+            text_instructions: List of text strings
+            proprio_states: [batch, 64] - joint positions, velocities, etc.
+            timestamps: Optional temporal information
+
+        Returns:
+            Dictionary with actions and intermediate representations
+        """
+        # Encode each modality
+        vision_features = self.vision_encoder(images)
+        language_features = self.language_encoder(text_instructions)
+        proprio_features = self.proprio_encoder(proprio_states)
+
+        # Temporal alignment if timestamps provided
+        if timestamps is not None:
+            # Align features temporally
+            # (Implementation would depend on specific temporal alignment strategy)
+            pass
+
+        # Fuse modalities
+        if isinstance(self.fusion, HierarchicalMultimodalFusion):
+            # Need to add sequence dimension for hierarchical fusion
+            vision_seq = vision_features.unsqueeze(1)
+            language_seq = language_features.unsqueeze(1)
+            proprio_seq = proprio_features.unsqueeze(1)
+
+            fusion_result = self.fusion(vision_seq, language_seq, proprio_seq)
+            fused_features = fusion_result['high_level']
+
+        elif isinstance(self.fusion, UncertaintyAwareFusion):
+            fusion_result = self.fusion(
+                vision_features,
+                language_features,
+                proprio_features
+            )
+            fused_features = fusion_result['fused']
+
+        else:
+            # MultimodalTransformer
+            fusion_result = self.fusion(
+                vision_features=vision_features.unsqueeze(1),
+                language_features=language_features.unsqueeze(1),
+                proprio_features=proprio_features.unsqueeze(1)
+            )
+            fused_features = fusion_result['pooled']
+
+        # Decode actions
+        actions = self.action_decoder(fused_features)
+
+        return {
+            'actions': actions,
+            'fused_features': fused_features,
+            'vision_features': vision_features,
+            'language_features': language_features,
+            'proprio_features': proprio_features,
+            'fusion_details': fusion_result
+        }
+
+    def predict_action(
+        self,
+        image: torch.Tensor,
+        text_instruction: str,
+        proprio_state: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Predict single action from inputs.
+
+        Args:
+            image: [3, H, W]
+            text_instruction: Text string
+            proprio_state: [64]
+
+        Returns:
+            Predicted action [action_dim]
+        """
+        self.eval()
+        with torch.no_grad():
+            # Add batch dimension
+            images = image.unsqueeze(0)
+            text_instructions = [text_instruction]
+            proprio_states = proprio_state.unsqueeze(0)
+
+            # Forward pass
+            outputs = self.forward(images, text_instructions, proprio_states)
+
+            # Extract action
+            action = outputs['actions'][0]
+
+        return action
+```
+
+## Training Strategies
+
+### Multi-Task Learning for Multimodal Systems
+
+Train on multiple tasks simultaneously:
+
+```python
+class MultiTaskTrainer:
+    """
+    Trainer for multimodal VLA with multiple tasks.
+    """
+
+    def __init__(
+        self,
+        model: MultimodalVLASystem,
+        learning_rate: float = 1e-4,
+        task_weights: Optional[Dict[str, float]] = None
+    ):
+        self.model = model
+        self.optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=0.01
+        )
+
+        # Task-specific loss weights
+        self.task_weights = task_weights or {
+            'action_prediction': 1.0,
+            'vision_reconstruction': 0.1,
+            'language_grounding': 0.5
+        }
+
+    def compute_multi_task_loss(
+        self,
+        outputs: Dict[str, torch.Tensor],
+        targets: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Compute multi-task loss.
+
+        Args:
+            outputs: Model outputs
+            targets: Ground truth targets
+
+        Returns:
+            Dictionary of losses
+        """
+        losses = {}
+
+        # Action prediction loss
+        if 'actions' in outputs and 'actions' in targets:
+            action_loss = nn.functional.mse_loss(
+                outputs['actions'],
+                targets['actions']
+            )
+            losses['action_prediction'] = action_loss
+
+        # Vision reconstruction loss (optional auxiliary task)
+        if 'reconstructed_image' in outputs and 'image' in targets:
+            recon_loss = nn.functional.mse_loss(
+                outputs['reconstructed_image'],
+                targets['image']
+            )
+            losses['vision_reconstruction'] = recon_loss
+
+        # Language grounding loss (optional auxiliary task)
+        if 'grounding_logits' in outputs and 'grounding_labels' in targets:
+            grounding_loss = nn.functional.cross_entropy(
+                outputs['grounding_logits'],
+                targets['grounding_labels']
+            )
+            losses['language_grounding'] = grounding_loss
+
+        # Weighted total loss
+        total_loss = sum(
+            self.task_weights.get(task, 1.0) * loss
+            for task, loss in losses.items()
+        )
+        losses['total'] = total_loss
+
+        return losses
+
+    def train_step(
+        self,
+        batch: Dict[str, torch.Tensor]
+    ) -> Dict[str, float]:
+        """Execute one training step."""
+        self.model.train()
+
+        # Forward pass
+        outputs = self.model(
+            images=batch['images'],
+            text_instructions=batch['text_instructions'],
+            proprio_states=batch['proprio_states']
+        )
+
+        # Compute losses
+        losses = self.compute_multi_task_loss(outputs, batch)
+
+        # Backward pass
+        self.optimizer.zero_grad()
+        losses['total'].backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        self.optimizer.step()
+
+        # Return scalar losses
+        return {k: v.item() for k, v in losses.items()}
+```
+
+## Best Practices
+
+1. **Modality Synchronization**: Ensure temporal alignment of different sensor streams
+2. **Uncertainty Quantification**: Model and propagate uncertainty through fusion
+3. **Hierarchical Processing**: Fuse at multiple levels of abstraction
+4. **Adaptive Weighting**: Learn to weight modalities based on reliability
+5. **Multi-Task Learning**: Train on auxiliary tasks to improve representations
+6. **Robustness**: Handle missing or corrupted modalities gracefully
+7. **Interpretability**: Visualize attention and modality contributions
+
+Multimodal integration enables humanoid robots to leverage diverse sensory inputs for comprehensive scene understanding and robust decision-making, creating systems that can operate effectively in complex, dynamic environments.

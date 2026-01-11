@@ -1,0 +1,235 @@
+# Module 4 Exercises: Vision-Language-Action (VLA)
+
+## Learning Objectives
+
+By completing these exercises, you will be able to:
+- Implement VLA models for humanoid robot control
+- Design language-vision grounding systems
+- Build multimodal fusion architectures
+- Deploy VLA systems on physical robots
+- Evaluate VLA model performance across tasks
+- Fine-tune pre-trained VLA models for specific applications
+
+## Exercise 1: Basic VLA Model Implementation
+
+### Objective
+Implement a basic VLA model that takes image and text inputs and generates robot action commands.
+
+### Tasks
+1. Implement vision encoder using ViT or ResNet
+2. Implement language encoder using BERT or similar
+3. Design cross-modal fusion module
+4. Implement action decoder for joint control
+5. Train model on simple pick-and-place dataset
+
+### Requirements
+- Model must process 640x480 images in real-time (>10 FPS)
+- Language encoder must handle variable-length instructions
+- Action decoder must output valid joint positions
+- System must achieve >70% success rate on validation set
+
+### Validation Steps
+- Test on held-out image-text pairs
+- Measure inference latency
+- Validate action feasibility
+- Assess generalization to novel objects
+
+## Exercise 2: Language Intent Recognition
+
+### Objective
+Build a system that recognizes intent and extracts parameters from natural language robot commands.
+
+### Tasks
+1. Implement intent classification for 10+ command types
+2. Design slot filling system for entity extraction
+3. Create semantic parser to convert commands to action structures
+4. Implement dialog management for multi-turn conversations
+5. Handle ambiguity and generate clarification questions
+
+### Requirements
+- Intent classification accuracy >85%
+- Slot filling F1 score >80%
+- System must handle contextual references (pronouns, etc.)
+- Gracefully handle ambiguous commands
+
+### Validation Steps
+- Test on diverse command phrasings
+- Evaluate entity extraction accuracy
+- Test multi-turn dialog scenarios
+- Measure clarification quality
+
+## Exercise 3: Vision-Language Grounding
+
+### Objective
+Implement a system that grounds linguistic references to objects and locations in visual scenes.
+
+### Tasks
+1. Integrate CLIP for zero-shot object grounding
+2. Implement spatial relationship understanding
+3. Design region proposal and grounding pipeline
+4. Create VQA-based verification system
+5. Convert grounded references to 3D robot coordinates
+
+### Requirements
+- Object grounding accuracy >75% on test set
+- Spatial relationship understanding for 5+ relations
+- System must handle novel object categories
+- 3D coordinate estimation error &lt;10cm
+
+### Validation Steps
+- Test on images with multiple objects
+- Validate spatial relationship extraction
+- Test zero-shot grounding on novel categories
+- Measure grounding-to-action accuracy
+
+## Exercise 4: Multimodal Fusion Architecture
+
+### Objective
+Design and implement a multimodal fusion system that combines vision, language, and proprioception.
+
+### Tasks
+1. Implement cross-modal attention mechanism
+2. Design temporal alignment for asynchronous modalities
+3. Create uncertainty-aware fusion module
+4. Implement hierarchical fusion at multiple levels
+5. Train end-to-end on multimodal dataset
+
+### Requirements
+- Fusion must handle missing modalities gracefully
+- Temporal alignment within 100ms window
+- Uncertainty estimates must be calibrated
+- Multi-level fusion improves performance >10%
+
+### Validation Steps
+- Test with single and multiple modalities
+- Validate temporal alignment accuracy
+- Assess uncertainty calibration
+- Compare hierarchical vs. single-level fusion
+
+## Exercise 5: VLA Model Training and Fine-Tuning
+
+### Objective
+Train a VLA model from scratch and fine-tune pre-trained models for specific tasks.
+
+### Tasks
+1. Prepare multimodal dataset with images, text, and actions
+2. Implement training loop with multi-task learning
+3. Add data augmentation for vision and language
+4. Fine-tune pre-trained vision-language model (CLIP, etc.)
+5. Evaluate on multiple downstream tasks
+
+### Requirements
+- Dataset must include >1000 examples
+- Training must converge in &lt;50 epochs
+- Fine-tuning must preserve general capabilities
+- Model must generalize to new tasks
+
+### Validation Steps
+- Monitor training loss and metrics
+- Test on held-out validation set
+- Evaluate zero-shot transfer performance
+- Assess task-specific adaptation
+
+## Exercise 6: Real-World VLA Deployment
+
+### Objective
+Deploy a VLA model on a physical humanoid robot and validate real-world performance.
+
+### Tasks
+1. Optimize model for edge deployment (quantization, pruning)
+2. Integrate with robot ROS 2 control system
+3. Implement safety checks and error handling
+4. Create real-time inference pipeline
+5. Conduct user studies with natural language commands
+
+### Requirements
+- Inference latency &lt;200ms on robot hardware
+- Safety checks must prevent dangerous actions
+- System must handle robot hardware failures gracefully
+- User satisfaction score >7/10
+
+### Validation Steps
+- Measure end-to-end latency
+- Test safety mechanisms
+- Evaluate robustness to failures
+- Conduct user trials with diverse commands
+
+## Learning Checkpoints
+
+### Checkpoint 1: VLA Architecture Fundamentals
+- [ ] Understand vision-language-action paradigm
+- [ ] Can implement basic VLA components
+- [ ] Know how to train end-to-end VLA models
+- [ ] Understand multimodal fusion techniques
+
+### Checkpoint 2: Language Understanding
+- [ ] Can implement intent recognition systems
+- [ ] Understand semantic parsing techniques
+- [ ] Know how to handle linguistic ambiguity
+- [ ] Can build dialog management systems
+
+### Checkpoint 3: Vision Grounding
+- [ ] Understand zero-shot grounding with CLIP
+- [ ] Can implement spatial reasoning systems
+- [ ] Know how to verify grounding results
+- [ ] Can convert 2D grounding to 3D coordinates
+
+### Checkpoint 4: Multimodal Integration
+- [ ] Understand cross-modal attention mechanisms
+- [ ] Can implement temporal alignment
+- [ ] Know uncertainty-aware fusion techniques
+- [ ] Understand hierarchical fusion architectures
+
+### Checkpoint 5: Deployment and Optimization
+- [ ] Can optimize models for edge deployment
+- [ ] Understand real-time inference constraints
+- [ ] Know safety and robustness requirements
+- [ ] Can integrate with robot control systems
+
+## Challenge Exercises
+
+### Challenge 1: Long-Horizon Task Execution
+Implement a VLA system that can execute multi-step tasks from high-level language descriptions (e.g., "prepare breakfast").
+
+### Challenge 2: Few-Shot Task Adaptation
+Design a system that can learn new tasks from just a few demonstrations and language descriptions.
+
+### Challenge 3: Interactive Learning
+Create a VLA system that improves through interaction, learning from human corrections and feedback.
+
+### Challenge 4: Multi-Robot Coordination
+Extend VLA to coordinate multiple humanoid robots using natural language commands.
+
+## Resources and References
+
+- RT-1 Paper: https://robotics-transformer.github.io/
+- RT-2 Paper: https://robotics-transformer2.github.io/
+- CLIP: https://github.com/openai/CLIP
+- PaLM-E: https://palm-e.github.io/
+- Hugging Face Transformers: https://huggingface.co/transformers/
+
+## Solutions and Guidance
+
+Solutions for these exercises will be provided in the instructor materials. Students are encouraged to work through the exercises independently before consulting solutions. For additional support, refer to the VLA examples provided in the module and recent research papers on vision-language-action models.
+
+## Evaluation Criteria
+
+### Technical Implementation (40%)
+- Code quality and organization
+- Model architecture correctness
+- Training stability and convergence
+
+### Performance (30%)
+- Task success rate
+- Generalization to novel scenarios
+- Real-time inference capability
+
+### Innovation (15%)
+- Novel approaches to challenges
+- Creative problem-solving
+- Integration of advanced techniques
+
+### Documentation (15%)
+- Clear code documentation
+- Comprehensive evaluation reports
+- Insightful analysis of results

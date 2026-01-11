@@ -1,0 +1,47 @@
+# Lab Setup Overview
+
+This section provides guidance for setting up your development environment to work with the concepts and examples in this book. All examples are designed to work in simulation environments, requiring no physical hardware.
+
+## Environment Requirements
+
+- **Operating System**: Ubuntu 22.04 LTS (recommended) or Windows with WSL2
+- **Memory**: 16GB RAM minimum (32GB recommended for simulation work)
+- **Storage**: 50GB free space for development environment
+- **Graphics**: GPU with CUDA support recommended (for NVIDIA Isaac examples)
+
+## Software Components
+
+This book covers several key software frameworks for humanoid robotics:
+
+1. **ROS 2 Humble Hawksbill** - Robot Operating System for communication and control
+2. **Gazebo/Fortress** - Physics-based simulation environment
+3. **NVIDIA Isaac** - AI perception and navigation tools
+4. **Unity** - High-fidelity visualization (optional)
+
+## Setup Sequence
+
+Follow these sections in order to set up your complete development environment:
+
+- [ROS 2 Installation](./ros2-installation.mdx) - Core middleware setup
+- [Gazebo Setup](./gazebo-setup.mdx) - Simulation environment configuration
+- [Isaac Setup](./isaac-setup.mdx) - AI perception and navigation tools
+
+Each section includes detailed instructions for Ubuntu 22.04. For other platforms, refer to the official documentation for each framework.
+
+## Testing Your Setup
+
+After completing the setup, you should be able to:
+- Run basic ROS 2 commands
+- Launch simple Gazebo simulations
+- Execute Python scripts that interface with ROS 2
+- Run basic perception examples (if Isaac is installed)
+
+## Troubleshooting
+
+If you encounter issues during setup:
+- Verify your system meets the minimum requirements
+- Check that you're using the LTS versions specified in this book
+- Consult the official documentation for each framework
+- Ensure your network connection allows downloading dependencies
+
+> 💡 **Pro Tip**: Consider using Docker containers for isolated environments, especially when working with different versions of frameworks.

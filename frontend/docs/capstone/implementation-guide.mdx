@@ -1,0 +1,691 @@
+# Capstone Implementation Guide
+
+## Overview
+
+This guide provides a step-by-step approach to implementing your capstone humanoid robot system. Follow these phases to build from foundational components to a complete integrated system.
+
+## Phase 1: Environment Setup (Week 1)
+
+### 1.1 Development Environment
+
+Set up your development workspace:
+
+```bash
+# Create workspace
+mkdir -p ~/humanoid_ws/src
+cd ~/humanoid_ws
+
+# Install dependencies
+sudo apt update
+sudo apt install -y \
+    ros-humble-desktop \
+    ros-humble-gazebo-ros-pkgs \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    python3-pip \
+    python3-colcon-common-extensions
+
+# Python dependencies
+pip3 install torch torchvision transformers opencv-python numpy
+```
+
+### 1.2 Project Structure
+
+Create your project structure:
+
+```bash
+cd ~/humanoid_ws/src
+ros2 pkg create --build-type ament_python humanoid_capstone
+cd humanoid_capstone
+
+# Create directory structure
+mkdir -p {config,launch,models,scripts,urdf,worlds,docs}
+mkdir -p humanoid_capstone/{perception,navigation,vla,control,safety}
+```
+
+### 1.3 Version Control
+
+Initialize git repository:
+
+```bash
+cd ~/humanoid_ws/src/humanoid_capstone
+git init
+echo "*.pyc\n__pycache__/\nbuild/\ninstall/\nlog/" > .gitignore
+git add .
+git commit -m "Initial project structure"
+```
+
+## Phase 2: Robot Description (Week 1-2)
+
+### 2.1 URDF Creation
+
+Create basic URDF model:
+
+```xml
+<!-- urdf/humanoid_robot.urdf.xacro -->
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="humanoid_robot">
+
+  <!-- Include common macros -->
+  <xacro:include filename="$(find humanoid_capstone)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find humanoid_capstone)/urdf/sensors.xacro"/>
+
+  <!-- Robot parameters -->
+  <xacro:property name="torso_height" value="0.5"/>
+  <xacro:property name="torso_width" value="0.25"/>
+  <xacro:property name="leg_length" value="0.8"/>
+
+  <!-- Base link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${torso_width} ${torso_width} ${torso_height}"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${torso_width} ${torso_width} ${torso_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="10.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+  </link>
+
+  <!-- Add joints and links for legs, arms, head -->
+  <!-- ... (implement full kinematic chain) -->
+
+  <!-- Sensors -->
+  <xacro:camera_sensor parent="head_link" name="camera"/>
+  <xacro:imu_sensor parent="base_link" name="imu"/>
+
+  <!-- Gazebo plugins -->
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>$(find humanoid_capstone)/config/controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+</robot>
+```
+
+### 2.2 Controller Configuration
+
+```yaml
+# config/controllers.yaml
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    position_controller:
+      type: position_controllers/JointGroupPositionController
+
+position_controller:
+  ros__parameters:
+    joints:
+      - left_hip_pitch
+      - left_hip_roll
+      - left_knee
+      - left_ankle_pitch
+      - right_hip_pitch
+      - right_hip_roll
+      - right_knee
+      - right_ankle_pitch
+      - left_shoulder_pitch
+      - left_elbow
+      - right_shoulder_pitch
+      - right_elbow
+```
+
+### 2.3 Launch Files
+
+```python
+# launch/simulation.launch.py
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch_ros.actions import Node
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from ament_index_python.packages import get_package_share_directory
+import os
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('humanoid_capstone')
+
+    # Gazebo launch
+    gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            os.path.join(get_package_share_directory('gazebo_ros'),
+                        'launch', 'gazebo.launch.py')
+        ])
+    )
+
+    # Robot state publisher
+    robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        parameters=[{
+            'robot_description': open(os.path.join(
+                pkg_share, 'urdf', 'humanoid_robot.urdf.xacro')).read()
+        }]
+    )
+
+    # Spawn entity
+    spawn_entity = Node(
+        package='gazebo_ros',
+        executable='spawn_entity.py',
+        arguments=['-topic', 'robot_description', '-entity', 'humanoid'],
+        output='screen'
+    )
+
+    return LaunchDescription([
+        gazebo,
+        robot_state_publisher,
+        spawn_entity
+    ])
+```
+
+## Phase 3: Perception System (Week 2-3)
+
+### 3.1 Camera Processing Node
+
+```python
+# humanoid_capstone/perception/camera_processor.py
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import cv2
+
+class CameraProcessor(Node):
+    def __init__(self):
+        super().__init__('camera_processor')
+
+        self.bridge = CvBridge()
+
+        self.subscription = self.create_subscription(
+            Image, '/camera/rgb/image_raw', self.image_callback, 10)
+
+        self.publisher = self.create_publisher(
+            Image, '/perception/processed_image', 10)
+
+    def image_callback(self, msg):
+        # Convert to OpenCV
+        cv_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+
+        # Process (resize, denoise, etc.)
+        processed = cv2.resize(cv_image, (640, 480))
+
+        # Publish
+        processed_msg = self.bridge.cv2_to_imgmsg(processed, 'bgr8')
+        self.publisher.publish(processed_msg)
+
+def main():
+    rclpy.init()
+    node = CameraProcessor()
+    rclpy.spin(node)
+```
+
+### 3.2 Object Detection Integration
+
+```python
+# humanoid_capstone/perception/object_detector.py
+import torch
+from ultralytics import YOLO
+
+class ObjectDetector(Node):
+    def __init__(self):
+        super().__init__('object_detector')
+
+        # Load model
+        self.model = YOLO('yolov8n.pt')
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        self.image_sub = self.create_subscription(
+            Image, '/perception/processed_image', self.detect_callback, 10)
+
+        self.detection_pub = self.create_publisher(
+            DetectionArray, '/perception/objects', 10)
+
+    def detect_callback(self, msg):
+        cv_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+
+        # Run detection
+        results = self.model(cv_image, device=self.device)
+
+        # Convert to ROS message
+        detections = self.results_to_msg(results)
+        self.detection_pub.publish(detections)
+```
+
+### 3.3 SLAM Integration
+
+```python
+# humanoid_capstone/perception/slam_node.py
+class SLAMNode(Node):
+    def __init__(self):
+        super().__init__('slam_node')
+
+        # Subscribe to camera and IMU
+        self.image_sub = self.create_subscription(
+            Image, '/camera/rgb/image_raw', self.image_callback, 10)
+        self.imu_sub = self.create_subscription(
+            Imu, '/imu/data', self.imu_callback, 10)
+
+        # Publish odometry and map
+        self.odom_pub = self.create_publisher(Odometry, '/slam/odometry', 10)
+        self.map_pub = self.create_publisher(OccupancyGrid, '/slam/map', 10)
+
+        # Initialize SLAM system (ORB-SLAM3, etc.)
+        self.slam_system = self.initialize_slam()
+
+    def image_callback(self, msg):
+        # Process with SLAM
+        pass
+```
+
+## Phase 4: VLA Integration (Week 3-4)
+
+### 4.1 VLA Node Implementation
+
+```python
+# humanoid_capstone/vla/vla_system.py
+class VLASystemNode(Node):
+    def __init__(self):
+        super().__init__('vla_system')
+
+        # Load VLA model
+        self.model = torch.jit.load('models/vla_model.pt')
+        self.model.eval()
+
+        # Subscriptions
+        self.image_sub = self.create_subscription(
+            Image, '/camera/rgb/image_raw', self.image_callback, 10)
+        self.command_sub = self.create_subscription(
+            String, '/vla/command', self.command_callback, 10)
+        self.joint_sub = self.create_subscription(
+            JointState, '/joint_states', self.joint_callback, 10)
+
+        # Publishers
+        self.action_pub = self.create_publisher(
+            Float64MultiArray, '/vla/actions', 10)
+
+        # State
+        self.current_image = None
+        self.current_command = None
+        self.current_joints = None
+
+        # Timer for inference
+        self.timer = self.create_timer(0.1, self.inference_step)
+
+    def inference_step(self):
+        if all([self.current_image, self.current_command, self.current_joints]):
+            # Run VLA inference
+            action = self.predict_action()
+
+            # Publish action
+            msg = Float64MultiArray()
+            msg.data = action.tolist()
+            self.action_pub.publish(msg)
+```
+
+### 4.2 Language Processing
+
+```python
+# humanoid_capstone/vla/language_processor.py
+from transformers import BertTokenizer, BertModel
+
+class LanguageProcessor(Node):
+    def __init__(self):
+        super().__init__('language_processor')
+
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.model = BertModel.from_pretrained('bert-base-uncased')
+
+        self.command_sub = self.create_subscription(
+            String, '/vla/command', self.process_command, 10)
+
+        self.intent_pub = self.create_publisher(
+            Intent, '/vla/intent', 10)
+
+    def process_command(self, msg):
+        # Tokenize and encode
+        inputs = self.tokenizer(msg.data, return_tensors='pt')
+        outputs = self.model(**inputs)
+
+        # Extract intent
+        intent = self.classify_intent(outputs)
+
+        # Publish
+        self.intent_pub.publish(intent)
+```
+
+## Phase 5: Navigation System (Week 4-5)
+
+### 5.1 Path Planner
+
+```python
+# humanoid_capstone/navigation/path_planner.py
+class PathPlanner(Node):
+    def __init__(self):
+        super().__init__('path_planner')
+
+        # Subscribe to goal and map
+        self.goal_sub = self.create_subscription(
+            PoseStamped, '/navigation/goal', self.goal_callback, 10)
+        self.map_sub = self.create_subscription(
+            OccupancyGrid, '/slam/map', self.map_callback, 10)
+
+        # Publish path
+        self.path_pub = self.create_publisher(Path, '/navigation/path', 10)
+
+        self.current_map = None
+
+    def goal_callback(self, goal_msg):
+        if self.current_map is None:
+            return
+
+        # Plan path using A*
+        path = self.plan_astar(goal_msg)
+        self.path_pub.publish(path)
+
+    def plan_astar(self, goal):
+        # Implement A* path planning
+        pass
+```
+
+### 5.2 Footstep Planner
+
+```python
+# humanoid_capstone/navigation/footstep_planner.py
+class FootstepPlanner(Node):
+    def __init__(self):
+        super().__init__('footstep_planner')
+
+        self.path_sub = self.create_subscription(
+            Path, '/navigation/path', self.path_callback, 10)
+
+        self.footstep_pub = self.create_publisher(
+            FootstepArray, '/navigation/footsteps', 10)
+
+        self.step_length = 0.3  # meters
+        self.step_width = 0.2   # meters
+
+    def path_callback(self, path_msg):
+        # Generate footsteps from path
+        footsteps = self.generate_footsteps(path_msg)
+        self.footstep_pub.publish(footsteps)
+
+    def generate_footsteps(self, path):
+        # Implement footstep planning algorithm
+        pass
+```
+
+## Phase 6: Control System (Week 5-6)
+
+### 6.1 Balance Controller
+
+```python
+# humanoid_capstone/control/balance_controller.py
+class BalanceController(Node):
+    def __init__(self):
+        super().__init__('balance_controller')
+
+        # Subscribe to IMU and joint states
+        self.imu_sub = self.create_subscription(
+            Imu, '/imu/data', self.imu_callback, 10)
+        self.joint_sub = self.create_subscription(
+            JointState, '/joint_states', self.joint_callback, 10)
+
+        # Publish joint commands
+        self.cmd_pub = self.create_publisher(
+            Float64MultiArray, '/control/joint_commands', 10)
+
+        # Control parameters
+        self.kp_balance = 10.0
+        self.kd_balance = 1.0
+
+        # Timer for control loop
+        self.timer = self.create_timer(0.01, self.control_loop)  # 100 Hz
+
+    def control_loop(self):
+        # Compute balance corrections
+        corrections = self.compute_balance_control()
+
+        # Apply to joint commands
+        self.cmd_pub.publish(corrections)
+```
+
+### 6.2 Safety Monitor
+
+```python
+# humanoid_capstone/safety/safety_monitor.py
+class SafetyMonitor(Node):
+    def __init__(self):
+        super().__init__('safety_monitor')
+
+        # Monitor all critical topics
+        self.joint_sub = self.create_subscription(
+            JointState, '/joint_states', self.check_joints, 10)
+        self.imu_sub = self.create_subscription(
+            Imu, '/imu/data', self.check_balance, 10)
+
+        # Emergency stop publisher
+        self.estop_pub = self.create_publisher(
+            Bool, '/safety/emergency_stop', 10)
+
+        # Safety thresholds
+        self.joint_limits = self.load_joint_limits()
+        self.balance_threshold = 0.3  # radians
+
+    def check_joints(self, msg):
+        for i, pos in enumerate(msg.position):
+            if not self.is_within_limits(i, pos):
+                self.trigger_emergency_stop('Joint limit violation')
+
+    def check_balance(self, msg):
+        # Check orientation
+        orientation = self.quaternion_to_euler(msg.orientation)
+        if abs(orientation[0]) > self.balance_threshold:
+            self.trigger_emergency_stop('Balance lost')
+
+    def trigger_emergency_stop(self, reason):
+        self.get_logger().error(f'EMERGENCY STOP: {reason}')
+        msg = Bool()
+        msg.data = True
+        self.estop_pub.publish(msg)
+```
+
+## Phase 7: Integration and Testing (Week 7-8)
+
+### 7.1 System Launch File
+
+```python
+# launch/full_system.launch.py
+def generate_launch_description():
+    return LaunchDescription([
+        # Simulation
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource([
+                get_package_share_directory('humanoid_capstone'),
+                '/launch/simulation.launch.py'])
+        ),
+
+        # Perception
+        Node(package='humanoid_capstone', executable='camera_processor'),
+        Node(package='humanoid_capstone', executable='object_detector'),
+        Node(package='humanoid_capstone', executable='slam_node'),
+
+        # VLA
+        Node(package='humanoid_capstone', executable='vla_system'),
+        Node(package='humanoid_capstone', executable='language_processor'),
+
+        # Navigation
+        Node(package='humanoid_capstone', executable='path_planner'),
+        Node(package='humanoid_capstone', executable='footstep_planner'),
+
+        # Control
+        Node(package='humanoid_capstone', executable='balance_controller'),
+        Node(package='humanoid_capstone', executable='safety_monitor'),
+    ])
+```
+
+### 7.2 Integration Testing
+
+```python
+# tests/integration_test.py
+import unittest
+import rclpy
+
+class IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        rclpy.init()
+
+    def test_end_to_end_command(self):
+        # Test: command -> perception -> planning -> execution
+        # Send command
+        # Verify action executed
+        pass
+
+    def test_safety_mechanisms(self):
+        # Test emergency stop
+        # Test joint limits
+        # Test balance recovery
+        pass
+
+    def tearDown(self):
+        rclpy.shutdown()
+```
+
+## Phase 8: Optimization and Refinement (Week 8-9)
+
+### 8.1 Performance Profiling
+
+```bash
+# Profile ROS 2 nodes
+ros2 run ros2_tracing trace
+ros2 trace start humanoid_trace
+# Run your system
+ros2 trace stop humanoid_trace
+ros2 trace analyze humanoid_trace
+```
+
+### 8.2 Model Optimization
+
+```python
+# Optimize VLA model with TensorRT
+from torch_tensorrt import compile
+
+optimized_model = compile(
+    vla_model,
+    inputs=[torch_tensorrt.Input((1, 3, 224, 224))],
+    enabled_precisions={torch.float16}
+)
+
+torch.jit.save(optimized_model, 'models/vla_optimized.pt')
+```
+
+## Phase 9: Documentation (Week 9-10)
+
+### 9.1 README
+
+```markdown
+# Humanoid Robot Capstone Project
+
+## Overview
+[Description of your project]
+
+## Installation
+```bash
+# Clone repository
+git clone https://github.com/yourusername/humanoid-capstone
+cd humanoid-capstone
+
+# Install dependencies
+./install_dependencies.sh
+
+# Build
+colcon build
+```
+
+## Usage
+```bash
+# Launch simulation
+ros2 launch humanoid_capstone simulation.launch.py
+
+# Launch full system
+ros2 launch humanoid_capstone full_system.launch.py
+
+# Send commands
+ros2 topic pub /vla/command std_msgs/String "data: 'pick up the cup'"
+```
+
+## Testing
+```bash
+colcon test
+```
+
+## Demo Videos
+[Links to demonstration videos]
+```
+
+### 9.2 Technical Report Outline
+
+1. **Introduction**
+   - Problem statement
+   - Objectives
+   - Approach overview
+
+2. **System Architecture**
+   - Component diagram
+   - Data flow
+   - Technology stack
+
+3. **Implementation**
+   - Key algorithms
+   - Design decisions
+   - Challenges and solutions
+
+4. **Evaluation**
+   - Test scenarios
+   - Performance metrics
+   - Results analysis
+
+5. **Conclusion**
+   - Achievements
+   - Limitations
+   - Future work
+
+## Troubleshooting Guide
+
+### Common Issues
+
+**Issue**: Robot falls in simulation
+- Check joint limits in URDF
+- Verify balance controller gains
+- Ensure proper CoM calculation
+
+**Issue**: VLA model inference too slow
+- Use TensorRT optimization
+- Reduce model size
+- Check GPU utilization
+
+**Issue**: Navigation fails
+- Verify map quality
+- Check path planner parameters
+- Ensure proper localization
+
+## Best Practices
+
+1. **Incremental Development**: Build and test one component at a time
+2. **Continuous Testing**: Test after each change
+3. **Version Control**: Commit frequently with clear messages
+4. **Documentation**: Document as you build, not after
+5. **Code Review**: Have peers review your code
+6. **Backup**: Keep backups of working versions
+
+Your capstone implementation should be methodical, well-tested, and thoroughly documented!

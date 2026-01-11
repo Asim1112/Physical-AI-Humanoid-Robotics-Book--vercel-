@@ -1,0 +1,1146 @@
+---
+title: "ROS 2 Integration"
+description: "Learn about integrating simulation environments with ROS 2 for humanoid robotics"
+tags: [ros2, simulation, integration, robotics, gazebo, unity]
+sidebar_label: "ROS 2 Integration"
+sidebar_position: 5
+keywords: [ros2, simulation, integration, robotics]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# ROS 2 Integration
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+ROS 2 integration is the cornerstone of effective simulation for humanoid robotics, enabling seamless communication between simulation environments and robot control systems. This chapter explores how to connect Gazebo and Unity simulations with ROS 2, creating a unified system where simulated robots can be controlled using the same interfaces as real robots, and where behaviors developed in simulation can be transferred to physical systems.
+
+The integration involves multiple layers of communication, from low-level sensor simulation and actuator control to high-level planning and coordination. We'll examine the architecture, tools, and best practices for creating robust simulation-integration systems that accelerate robot development while maintaining the fidelity needed for effective sim-to-real transfer.
+
+### Learning Objectives
+
+- Understand the architecture of ROS 2 simulation integration systems
+- Implement Gazebo-ROS 2 communication for physics simulation
+- Connect Unity visualization with ROS 2 control systems
+- Create bidirectional data flow between simulation and control
+- Validate simulation fidelity against real robot behavior
+- Optimize integration for performance and reliability
+
+### Prerequisites
+
+- Understanding of ROS 2 communication patterns from Module 1
+- Knowledge of Gazebo physics from the previous chapter
+- Basic understanding of Unity-ROS integration concepts
+- Familiarity with robot control systems and sensor data processing
+
+## Deep Explanation
+
+### Simulation Integration Architecture
+
+The integration between simulation environments and ROS 2 follows a standardized architecture:
+
+#### Gazebo-ROS Bridge
+The `gazebo_ros_pkgs` and newer `ros_gz` packages provide the bridge between Gazebo simulation and ROS 2:
+
+- **gazebo_ros**: Legacy bridge for Gazebo Classic
+- **ros_gz**: Modern bridge for Ignition Gazebo/Harmonic
+- **Sensor plugins**: Publish sensor data to ROS topics
+- **Actuator plugins**: Subscribe to ROS topics for motor control
+- **Model plugins**: Handle custom robot behaviors in simulation
+
+#### Unity-ROS Bridge
+The Unity-ROS connection typically uses:
+
+- **ROS#**: .NET-based ROS client for Unity
+- **TCP/UDP communication**: Network-based message passing
+- **Custom message handling**: Serialization/deserialization of ROS messages
+- **Asset integration**: Unity components for ROS communication
+
+### Communication Patterns in Simulation
+
+Simulation integration uses various ROS 2 communication patterns:
+
+#### Sensor Data Flow
+- **Publishers**: Simulation environment publishes sensor data
+- **Message types**: sensor_msgs for cameras, IMU, LiDAR, etc.
+- **QoS settings**: Appropriate for real-time sensor data
+- **Synchronization**: Coordination between multiple sensors
+
+#### Control Command Flow
+- **Subscribers**: Simulation environment subscribes to control commands
+- **Joint control**: Position, velocity, or effort control interfaces
+- **Trajectory execution**: Action-based trajectory following
+- **Safety monitoring**: Command validation and limits
+
+#### State and Configuration
+- **Services**: Robot state queries and configuration changes
+- **Parameters**: Runtime configuration of simulation properties
+- **Actions**: Long-running processes like navigation or manipulation
+- **Transforms**: Coordinate frame relationships (TF)
+
+### Gazebo-ROS Integration Components
+
+#### Sensor Plugins
+Gazebo sensor plugins bridge simulated sensors to ROS topics:
+
+- **Camera plugins**: Publish sensor_msgs/Image messages
+- **IMU plugins**: Publish sensor_msgs/Imu messages
+- **LiDAR plugins**: Publish sensor_msgs/LaserScan or sensor_msgs/PointCloud2
+- **Force/Torque plugins**: Publish geometry_msgs/WrenchStamped
+
+#### Actuator Plugins
+Gazebo actuator plugins bridge ROS commands to simulated joints:
+
+- **Joint position controllers**: Subscribe to position commands
+- **Joint velocity controllers**: Subscribe to velocity commands
+- **Joint effort controllers**: Subscribe to effort/torque commands
+- **ROS 2 Control**: Modern control framework integration
+
+#### Model Plugins
+Custom plugins for robot-specific behaviors:
+
+- **Custom controllers**: Robot-specific simulation logic
+- **Sensor processing**: On-board simulation of sensor processing
+- **Communication simulation**: Network delay and reliability modeling
+- **Failure simulation**: Component failure and recovery simulation
+
+### Unity-ROS Integration Components
+
+#### Message Handling
+Unity handles ROS messages through the ROS# library:
+
+- **Serialization**: Converting between Unity types and ROS messages
+- **Deserialization**: Converting ROS messages to Unity objects
+- **Message validation**: Ensuring message integrity
+- **Connection management**: Handling network communication
+
+#### Visualization Mapping
+Mapping between ROS coordinate systems and Unity:
+
+- **Coordinate transformation**: ROS (X-forward, Y-left, Z-up) to Unity (X-right, Y-up, Z-forward)
+- **Unit conversion**: Meters to Unity units
+- **Timing synchronization**: Aligning simulation and visualization clocks
+- **Data interpolation**: Smoothing for visualization purposes
+
+### Simulation Fidelity Considerations
+
+Effective simulation integration must balance:
+
+#### Accuracy vs. Performance
+- **Physics accuracy**: Detailed collision models vs. performance
+- **Sensor simulation**: Realistic noise models vs. computational cost
+- **Network latency**: Real-world communication delays vs. responsiveness
+- **Update rates**: High-frequency updates vs. system load
+
+#### Realism vs. Stability
+- **Realistic parameters**: Accurate simulation vs. numerical stability
+- **Contact modeling**: Complex interactions vs. simulation stability
+- **Control response**: Accurate dynamics vs. controller stability
+- **Environmental effects**: Realistic conditions vs. simulation robustness
+
+### Integration Validation
+
+Validating simulation integration involves:
+
+#### Sensor Data Validation
+- Comparing simulated vs. real sensor data
+- Validating noise characteristics
+- Checking timing and synchronization
+- Verifying field of view and range limits
+
+#### Control Response Validation
+- Comparing command-to-response times
+- Validating joint limits and constraints
+- Checking control accuracy and precision
+- Verifying safety systems behavior
+
+## Practical Examples
+
+### Example 1: Gazebo-ROS Integration Launch File
+
+<Tabs>
+<TabItem value="launch_file" label="Launch File" default>
+
+```xml
+<?xml version="1.0"?>
+<launch>
+  <!-- Arguments for configuration -->
+  <arg name="world_name" default="humanoid_test_world"/>
+  <arg name="model_name" default="simple_humanoid"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="headless" default="false"/>
+
+  <!-- Gazebo server -->
+  <include file="$(find-pkg-share gazebo_ros)/launch/gazebo.launch.py">
+    <arg name="world" value="$(find-pkg-share my_robot_gazebo)/worlds/$(var world_name).sdf"/>
+    <arg name="headless" value="$(var headless)"/>
+    <arg name="verbose" value="false"/>
+  </include>
+
+  <!-- Robot state publisher -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher">
+    <param name="robot_description" value="$(find-pkg-share my_robot_description)/urdf/$(var model_name).urdf"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <!-- Spawn robot in Gazebo -->
+  <node pkg="gazebo_ros" exec="spawn_entity.py" name="spawn_robot">
+    <param name="world_name" value="$(var world_name)"/>
+    <param name="robot_name" value="$(var model_name)"/>
+    <param name="robot_namespace" value=""/>
+    <param name="x" value="0.0"/>
+    <param name="y" value="0.0"/>
+    <param name="z" value="1.0"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <!-- ROS 2 Control -->
+  <node pkg="controller_manager" exec="ros2_control_node" name="ros2_control_node">
+    <param name="robot_description" value="$(find-pkg-share my_robot_description)/urdf/$(var model_name).urdf"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <!-- Load controllers -->
+  <node pkg="controller_manager" exec="spawner" name="joint_state_broadcaster_spawner" args="joint_state_broadcaster"/>
+  <node pkg="controller_manager" exec="spawner" name="arm_controller_spawner" args="arm_controller"/>
+  <node pkg="controller_manager" exec="spawner" name="leg_controller_spawner" args="leg_controller"/>
+
+  <!-- Simulation-specific nodes -->
+  <node pkg="my_robot_sim" exec="contact_analyzer" name="contact_analyzer">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <node pkg="my_robot_sim" exec="physics_validator" name="physics_validator">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+</launch>
+```
+
+</TabItem>
+<TabItem value="ros2_control_config" label="ROS 2 Control Configuration">
+
+```yaml
+# Configuration for ROS 2 Control integration with Gazebo
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz
+    use_sim_time: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_controller:
+      type: position_controllers/JointGroupPositionController
+
+    leg_controller:
+      type: position_controllers/JointGroupPositionController
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - left_shoulder_joint
+      - left_elbow_joint
+      - left_wrist_joint
+      - right_shoulder_joint
+      - right_elbow_joint
+      - right_wrist_joint
+
+leg_controller:
+  ros__parameters:
+    joints:
+      - left_hip_joint
+      - left_knee_joint
+      - left_ankle_joint
+      - right_hip_joint
+      - right_knee_joint
+      - right_ankle_joint
+
+# Gazebo simulation parameters
+gazebo:
+  ros__parameters:
+    # Physics parameters
+    physics:
+      type: ode
+      max_step_size: 0.001
+      real_time_factor: 1.0
+      real_time_update_rate: 1000.0
+      gravity: [0.0, 0.0, -9.8]
+
+    # Sensor parameters
+    sensors:
+      camera:
+        update_rate: 30.0
+        image_width: 640
+        image_height: 480
+        fov: 1.047
+        distortion:
+          k1: -0.1
+          k2: 0.02
+          p1: 0.0
+          p2: 0.0
+
+      imu:
+        update_rate: 100.0
+        noise_density: 0.0001
+        random_walk: 0.0001
+
+    # Joint parameters
+    joints:
+      left_hip_joint:
+        friction: 0.1
+        damping: 1.0
+      right_hip_joint:
+        friction: 0.1
+        damping: 1.0
+      # Add parameters for other joints as needed
+```
+
+</TabItem>
+</Tabs>
+
+### Example 2: Simulation Integration Node
+
+<Tabs>
+<TabItem value="integration_node" label="Simulation Integration Node">
+
+```python
+#!/usr/bin/env python3
+# Example: Simulation integration node for humanoid robot
+
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+from sensor_msgs.msg import JointState, Imu, LaserScan
+from geometry_msgs.msg import Twist, PoseStamped
+from std_msgs.msg import Float64MultiArray, Bool, String
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from control_msgs.action import FollowJointTrajectory
+from rclpy.action import ActionServer, GoalResponse, CancelResponse
+from builtin_interfaces.msg import Duration
+import time
+import threading
+import numpy as np
+from collections import deque
+
+
+class SimulationIntegrationNode(Node):
+    """
+    A node that manages the integration between simulation and control systems.
+    Handles sensor data processing, control command forwarding, and simulation validation.
+    """
+
+    def __init__(self):
+        super().__init__('simulation_integration')
+
+        # Declare parameters
+        self.declare_parameter('use_sim_time', True)
+        self.declare_parameter('control_frequency', 100)
+        self.declare_parameter('sensor_frequency', 50)
+        self.declare_parameter('validation_frequency', 10)
+        self.declare_parameter('sim_fidelity_threshold', 0.05)
+
+        # Get parameter values
+        self.use_sim_time = self.get_parameter('use_sim_time').value
+        self.control_frequency = self.get_parameter('control_frequency').value
+        self.sensor_frequency = self.get_parameter('sensor_frequency').value
+        self.validation_frequency = self.get_parameter('validation_frequency').value
+        self.fidelity_threshold = self.get_parameter('sim_fidelity_threshold').value
+
+        # State tracking
+        self.joint_states = None
+        self.imu_data = None
+        self.laser_scan = None
+        self.control_commands = None
+
+        # History for validation
+        self.joint_history = deque(maxlen=100)
+        self.control_history = deque(maxlen=100)
+
+        # QoS profiles for different data types
+        sensor_qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE
+        )
+
+        control_qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE
+        )
+
+        # Subscribers for simulation sensor data
+        self.joint_state_sub = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10,
+            callback_group=rclpy.callback_groups.ReentrantCallbackGroup()
+        )
+
+        self.imu_sub = self.create_subscription(
+            Imu,
+            '/imu/data',
+            self.imu_callback,
+            sensor_qos,
+            callback_group=rclpy.callback_groups.ReentrantCallbackGroup()
+        )
+
+        self.laser_sub = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.laser_callback,
+            sensor_qos,
+            callback_group=rclpy.callback_groups.ReentrantCallbackGroup()
+        )
+
+        # Publishers for control commands
+        self.joint_cmd_pub = self.create_publisher(
+            Float64MultiArray,
+            '/joint_group_position_controller/commands',
+            control_qos
+        )
+
+        self.cmd_vel_pub = self.create_publisher(
+            Twist,
+            '/cmd_vel',
+            control_qos
+        )
+
+        # Publishers for validation and monitoring
+        self.sim_validation_pub = self.create_publisher(
+            Float64MultiArray,
+            '/simulation/validation',
+            10
+        )
+
+        self.sim_status_pub = self.create_publisher(
+            String,
+            '/simulation/status',
+            10
+        )
+
+        # Action server for trajectory execution
+        self.trajectory_action_server = ActionServer(
+            self,
+            FollowJointTrajectory,
+            'joint_trajectory_controller/follow_joint_trajectory',
+            execute_callback=self.execute_trajectory_callback,
+            goal_callback=self.trajectory_goal_callback,
+            cancel_callback=self.trajectory_cancel_callback
+        )
+
+        # Timers for different functions
+        control_period = 1.0 / self.control_frequency
+        self.control_timer = self.create_timer(
+            control_period,
+            self.control_loop,
+            callback_group=rclpy.callback_groups.ReentrantCallbackGroup()
+        )
+
+        validation_period = 1.0 / self.validation_frequency
+        self.validation_timer = self.create_timer(
+            validation_period,
+            self.validation_loop,
+            callback_group=rclpy.callback_groups.ReentrantCallbackGroup()
+        )
+
+        # Initialize simulation status
+        self.simulation_running = True
+        self.simulation_fidelity = 1.0  # 1.0 = perfect, 0.0 = no fidelity
+
+        self.get_logger().info(f'Simulation Integration Node initialized with {self.control_frequency}Hz control rate')
+
+    def joint_state_callback(self, msg):
+        """Handle joint state updates from simulation."""
+        self.joint_states = msg
+
+        # Store in history for validation
+        self.joint_history.append({
+            'timestamp': time.time(),
+            'positions': list(msg.position),
+            'velocities': list(msg.velocity),
+            'efforts': list(msg.effort)
+        })
+
+        # Validate joint limits
+        for i, (name, pos) in enumerate(zip(msg.name, msg.position)):
+            if abs(pos) > 3.14:  # Check for extreme positions
+                self.get_logger().warn(f'Joint {name} has extreme position: {pos}')
+
+    def imu_callback(self, msg):
+        """Handle IMU data from simulation."""
+        self.imu_data = msg
+
+        # Check for balance (simplified - looking at orientation)
+        pitch = self.get_pitch_from_quaternion(msg.orientation)
+        if abs(pitch) > 0.5:  # More than ~28 degrees
+            self.get_logger().warn(f'Robot tilt angle: {pitch:.3f} - possible balance issue')
+
+    def laser_callback(self, msg):
+        """Handle laser scan data from simulation."""
+        self.laser_scan = msg
+
+        # Check for obstacles (simplified - looking at front range)
+        if len(msg.ranges) > 0:
+            front_range = msg.ranges[len(msg.ranges) // 2]  # Middle range is front
+            if 0 < front_range < 0.5:  # Obstacle within 50cm
+                self.get_logger().info(f'Obstacle detected at {front_range:.2f}m')
+
+    def get_pitch_from_quaternion(self, orientation):
+        """Extract pitch angle from quaternion."""
+        import math
+        # Simplified pitch calculation
+        sinr_cosp = 2 * (orientation.w * orientation.y - orientation.z * orientation.x)
+        cosr_cosp = 1 - 2 * (orientation.y * orientation.y + orientation.x * orientation.x)
+        return math.atan2(sinr_cosp, cosr_cosp)
+
+    def control_loop(self):
+        """Main control loop that processes and validates simulation data."""
+        if not self.simulation_running:
+            return
+
+        # Process sensor data and prepare control commands
+        control_cmd = self.generate_control_commands()
+
+        if control_cmd is not None:
+            # Publish control commands
+            self.joint_cmd_pub.publish(control_cmd)
+
+            # Store command in history for validation
+            self.control_history.append({
+                'timestamp': time.time(),
+                'commands': list(control_cmd.data)
+            })
+
+    def generate_control_commands(self):
+        """Generate control commands based on current state."""
+        # In a real implementation, this would contain actual control logic
+        # For this example, we'll just return a simple command pattern
+
+        if self.joint_states is None:
+            return None
+
+        # Example: Simple joint position control
+        # This would typically come from a higher-level controller
+        cmd_msg = Float64MultiArray()
+
+        # For demonstration, we'll send a simple oscillating pattern
+        # In reality, this would come from a motion planner or controller
+        commands = []
+        current_time = time.time()
+
+        for i, joint_name in enumerate(self.joint_states.name):
+            # Create a simple oscillating pattern for demonstration
+            if 'hip' in joint_name.lower():
+                command = 0.1 * np.sin(current_time * 0.5)
+            elif 'knee' in joint_name.lower():
+                command = 0.05 * np.sin(current_time * 0.7)
+            elif 'ankle' in joint_name.lower():
+                command = 0.08 * np.sin(current_time * 0.3)
+            else:
+                command = 0.0  # Default position for other joints
+
+            commands.append(command)
+
+        cmd_msg.data = commands
+        return cmd_msg
+
+    def validation_loop(self):
+        """Validate simulation fidelity and performance."""
+        if not self.joint_states or not self.control_history:
+            return
+
+        # Calculate simulation fidelity metrics
+        fidelity_metrics = self.calculate_fidelity_metrics()
+
+        # Publish validation results
+        validation_msg = Float64MultiArray()
+        validation_msg.data = [
+            fidelity_metrics.get('fidelity_score', 0.0),
+            fidelity_metrics.get('response_delay', 0.0),
+            fidelity_metrics.get('control_accuracy', 0.0),
+            fidelity_metrics.get('sensor_consistency', 0.0)
+        ]
+
+        self.sim_validation_pub.publish(validation_msg)
+
+        # Update simulation status
+        status_msg = String()
+        if fidelity_metrics.get('fidelity_score', 0.0) < self.fidelity_threshold:
+            status_msg.data = f'LOW_FIDELITY ({fidelity_metrics.get("fidelity_score", 0.0):.3f})'
+            self.get_logger().warn(f'Simulation fidelity below threshold: {fidelity_metrics.get("fidelity_score", 0.0):.3f}')
+        else:
+            status_msg.data = f'VALID ({fidelity_metrics.get("fidelity_score", 0.0):.3f})'
+
+        self.sim_status_pub.publish(status_msg)
+
+    def calculate_fidelity_metrics(self):
+        """Calculate various fidelity metrics for simulation validation."""
+        metrics = {}
+
+        # Calculate response delay (simplified)
+        if self.joint_history and self.control_history:
+            # Estimate delay between command and response
+            recent_joint = self.joint_history[-1] if self.joint_history else None
+            recent_control = self.control_history[-1] if self.control_history else None
+
+            if recent_joint and recent_control:
+                delay = abs(recent_joint['timestamp'] - recent_control['timestamp'])
+                metrics['response_delay'] = delay
+
+        # Calculate control accuracy (simplified)
+        if self.joint_states and len(self.control_history) > 0:
+            latest_command = self.control_history[-1]['commands']
+            current_positions = self.joint_states.position
+
+            # Calculate average difference between command and actual position
+            if len(latest_command) == len(current_positions):
+                diffs = [abs(cmd - pos) for cmd, pos in zip(latest_command, current_positions)]
+                avg_diff = sum(diffs) / len(diffs) if diffs else 0.0
+                metrics['control_accuracy'] = 1.0 / (1.0 + avg_diff)  # Convert to 0-1 scale
+
+        # Calculate sensor consistency (simplified)
+        if self.imu_data and self.joint_states:
+            # Check if IMU data is consistent with joint state expectations
+            # This is a simplified check - in reality, you'd have more sophisticated validation
+            metrics['sensor_consistency'] = 0.9  # Placeholder value
+
+        # Overall fidelity score (simplified)
+        accuracy = metrics.get('control_accuracy', 0.5)
+        consistency = metrics.get('sensor_consistency', 0.5)
+        metrics['fidelity_score'] = (accuracy + consistency) / 2.0
+
+        return metrics
+
+    def execute_trajectory_callback(self, goal_handle):
+        """Execute joint trajectory in simulation."""
+        self.get_logger().info('Executing joint trajectory in simulation')
+
+        # In a real implementation, this would send the trajectory to the simulation
+        # For this example, we'll just simulate execution
+
+        feedback_msg = FollowJointTrajectory.Feedback()
+        result = FollowJointTrajectory.Result()
+
+        for i, point in enumerate(goal_handle.request.trajectory.points):
+            # Check if the goal was canceled
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                result.error_code = FollowJointTrajectory.Result.PATH_TOLERANCE_VIOLATED
+                return result
+
+            # Simulate trajectory execution
+            # In reality, this would involve sending commands to the simulated joints
+            time.sleep(0.1)  # Simulate time for each point
+
+            # Update feedback
+            feedback_msg.joint_names = goal_handle.request.trajectory.joint_names
+            feedback_msg.actual.positions = list(point.positions)
+            feedback_msg.desired.positions = list(point.positions)
+
+            progress = float(i + 1) / len(goal_handle.request.trajectory.points)
+            feedback_msg.progress = progress
+
+            goal_handle.publish_feedback(feedback_msg)
+
+        # Complete successfully
+        goal_handle.succeed()
+        result.error_code = FollowJointTrajectory.Result.SUCCESSFUL
+        self.get_logger().info('Joint trajectory completed successfully')
+        return result
+
+    def trajectory_goal_callback(self, goal_request):
+        """Accept or reject trajectory goals."""
+        # Check if trajectory is valid and can be executed
+        if len(goal_request.trajectory.points) == 0:
+            self.get_logger().warn('Received trajectory with no points')
+            return GoalResponse.REJECT
+
+        # Check if joint names match expected joints
+        expected_joints = ['left_hip', 'left_knee', 'left_ankle', 'right_hip', 'right_knee', 'right_ankle']
+        requested_joints = goal_request.trajectory.joint_names
+
+        # This is a simplified check - in reality, you'd validate more thoroughly
+        if all(joint in expected_joints for joint in requested_joints):
+            self.get_logger().info(f'Accepting trajectory goal for joints: {requested_joints}')
+            return GoalResponse.ACCEPT
+        else:
+            self.get_logger().warn(f'Rejecting trajectory - joints {requested_joints} not supported')
+            return GoalResponse.REJECT
+
+    def trajectory_cancel_callback(self, goal_handle):
+        """Accept or reject trajectory cancellation."""
+        self.get_logger().info('Received trajectory cancellation request')
+        return CancelResponse.ACCEPT
+
+    def get_simulation_status(self):
+        """Get current simulation status and metrics."""
+        status = {
+            'running': self.simulation_running,
+            'fidelity': self.simulation_fidelity,
+            'joint_count': len(self.joint_states.name) if self.joint_states else 0,
+            'control_frequency': self.control_frequency,
+            'validation_frequency': self.validation_frequency
+        }
+        return status
+
+
+def main(args=None):
+    """Main function to run the simulation integration node."""
+    rclpy.init(args=args)
+
+    node = SimulationIntegrationNode()
+
+    # Use a multi-threaded executor to handle multiple callbacks
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
+
+    try:
+        node.get_logger().info('Simulation Integration Node started')
+        executor.spin()
+    except KeyboardInterrupt:
+        node.get_logger().info('Interrupted by user')
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="unity_ros_bridge" label="Unity-ROS Bridge Node">
+
+```python
+#!/usr/bin/env python3
+# Example: Unity-ROS bridge node for visualization integration
+
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+from sensor_msgs.msg import JointState, Imu, Image
+from geometry_msgs.msg import Twist, Pose, Point
+from std_msgs.msg import Float64MultiArray, String, Bool
+from visualization_msgs.msg import Marker, MarkerArray
+from tf2_msgs.msg import TFMessage
+import socket
+import json
+import threading
+import time
+from collections import defaultdict
+
+
+class UnityROSBridge(Node):
+    """
+    A node that bridges between ROS 2 and Unity for visualization and interaction.
+    Handles message conversion between ROS and Unity formats.
+    """
+
+    def __init__(self):
+        super().__init__('unity_ros_bridge')
+
+        # Declare parameters
+        self.declare_parameter('unity_ip', '127.0.0.1')
+        self.declare_parameter('unity_port', 5005)
+        self.declare_parameter('ros_frequency', 30)
+        self.declare_parameter('unity_frequency', 60)
+
+        # Get parameter values
+        self.unity_ip = self.get_parameter('unity_ip').value
+        self.unity_port = self.get_parameter('unity_port').value
+        self.ros_frequency = self.get_parameter('ros_frequency').value
+        self.unity_frequency = self.get_parameter('unity_frequency').value
+
+        # Setup ROS communication
+        qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE
+        )
+
+        # ROS subscribers
+        self.joint_state_sub = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10
+        )
+
+        self.imu_sub = self.create_subscription(
+            Imu,
+            '/imu/data',
+            self.imu_callback,
+            qos
+        )
+
+        self.cmd_vel_sub = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self.cmd_vel_callback,
+            10
+        )
+
+        # ROS publishers for Unity commands
+        self.unity_cmd_pub = self.create_publisher(
+            String,
+            '/unity_commands',
+            10
+        )
+
+        # Visualization publishers
+        self.marker_pub = self.create_publisher(
+            Marker,
+            '/unity_visualization',
+            10
+        )
+
+        self.tf_pub = self.create_publisher(
+            TFMessage,
+            '/tf',
+            10
+        )
+
+        # Initialize Unity connection
+        self.unity_socket = None
+        self.connect_to_unity()
+
+        # Data storage
+        self.robot_state = {
+            'joint_positions': {},
+            'imu_data': None,
+            'robot_pose': {'x': 0, 'y': 0, 'z': 0, 'qx': 0, 'qy': 0, 'qz': 0, 'qw': 1}
+        }
+
+        # Setup timers
+        ros_period = 1.0 / self.ros_frequency
+        self.ros_timer = self.create_timer(ros_period, self.ros_update_loop)
+
+        unity_period = 1.0 / self.unity_frequency
+        self.unity_timer = self.create_timer(unity_period, self.unity_update_loop)
+
+        # Threading for Unity communication
+        self.unity_thread = threading.Thread(target=self.listen_to_unity, daemon=True)
+        self.unity_thread.start()
+
+        self.get_logger().info(f'Unity-ROS Bridge initialized - connecting to {self.unity_ip}:{self.unity_port}')
+
+    def connect_to_unity(self):
+        """Establish connection to Unity application."""
+        try:
+            self.unity_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.unity_socket.settimeout(1.0)
+            self.get_logger().info(f'Connected to Unity at {self.unity_ip}:{self.unity_port}')
+        except Exception as e:
+            self.get_logger().error(f'Failed to connect to Unity: {e}')
+
+    def listen_to_unity(self):
+        """Listen for messages from Unity."""
+        if not self.unity_socket:
+            return
+
+        while rclpy.ok():
+            try:
+                data, addr = self.unity_socket.recvfrom(4096)
+                message = data.decode('utf-8')
+
+                # Parse Unity message
+                try:
+                    unity_msg = json.loads(message)
+                    self.process_unity_message(unity_msg)
+                except json.JSONDecodeError:
+                    self.get_logger().warn(f'Invalid JSON from Unity: {message}')
+
+            except socket.timeout:
+                continue  # No message received, continue loop
+            except Exception as e:
+                self.get_logger().error(f'Error receiving from Unity: {e}')
+                time.sleep(0.1)  # Brief pause before retrying
+
+    def process_unity_message(self, msg):
+        """Process messages received from Unity."""
+        msg_type = msg.get('type', '')
+
+        if msg_type == 'user_command':
+            # Process user commands from Unity UI
+            command = msg.get('command', '')
+            self.handle_user_command(command, msg)
+        elif msg_type == 'robot_interaction':
+            # Process robot interaction from Unity scene
+            interaction = msg.get('interaction', {})
+            self.handle_robot_interaction(interaction)
+        elif msg_type == 'visualization_request':
+            # Process visualization requests
+            viz_request = msg.get('request', {})
+            self.handle_visualization_request(viz_request)
+
+    def joint_state_callback(self, msg):
+        """Handle joint state updates from ROS."""
+        for i, (name, position) in enumerate(zip(msg.name, msg.position)):
+            self.robot_state['joint_positions'][name] = position
+
+    def imu_callback(self, msg):
+        """Handle IMU data from ROS."""
+        self.robot_state['imu_data'] = {
+            'orientation': {
+                'x': msg.orientation.x,
+                'y': msg.orientation.y,
+                'z': msg.orientation.z,
+                'w': msg.orientation.w
+            },
+            'angular_velocity': {
+                'x': msg.angular_velocity.x,
+                'y': msg.angular_velocity.y,
+                'z': msg.angular_velocity.z
+            },
+            'linear_acceleration': {
+                'x': msg.linear_acceleration.x,
+                'y': msg.linear_acceleration.y,
+                'z': msg.linear_acceleration.z
+            }
+        }
+
+    def cmd_vel_callback(self, msg):
+        """Handle velocity commands from ROS."""
+        # Update robot pose based on velocity (simplified integration)
+        # In a real system, this would integrate with actual robot pose
+        pass
+
+    def handle_user_command(self, command, details):
+        """Handle commands from Unity UI."""
+        if command == 'reset_simulation':
+            self.get_logger().info('Reset command received from Unity')
+            # Publish reset command to appropriate ROS topic
+            reset_msg = String()
+            reset_msg.data = 'reset'
+            self.unity_cmd_pub.publish(reset_msg)
+        elif command == 'start_recording':
+            self.get_logger().info('Start recording command from Unity')
+            # Handle recording start
+        elif command == 'stop_recording':
+            self.get_logger().info('Stop recording command from Unity')
+            # Handle recording stop
+
+    def handle_robot_interaction(self, interaction):
+        """Handle robot interactions from Unity scene."""
+        interaction_type = interaction.get('type', '')
+        target = interaction.get('target', '')
+
+        if interaction_type == 'click':
+            self.get_logger().info(f'Robot interaction: {target}')
+            # Handle click on robot part
+        elif interaction_type == 'drag':
+            # Handle drag interaction
+            pass
+
+    def handle_visualization_request(self, request):
+        """Handle visualization requests from Unity."""
+        request_type = request.get('request_type', '')
+
+        if request_type == 'sensor_overlay':
+            # Send sensor data for visualization overlay
+            self.send_sensor_visualization()
+        elif request_type == 'trajectory_display':
+            # Send trajectory data for visualization
+            self.send_trajectory_visualization()
+
+    def ros_update_loop(self):
+        """Update ROS data structures."""
+        # This method runs at ROS frequency
+        # Perform any ROS-side updates needed
+        pass
+
+    def unity_update_loop(self):
+        """Send data to Unity."""
+        if not self.unity_socket:
+            return
+
+        # Prepare robot state data for Unity
+        unity_data = {
+            'type': 'robot_state',
+            'timestamp': time.time(),
+            'joint_positions': self.robot_state['joint_positions'],
+            'imu_data': self.robot_state['imu_data'],
+            'robot_pose': self.robot_state['robot_pose']
+        }
+
+        try:
+            json_data = json.dumps(unity_data)
+            self.unity_socket.sendto(json_data.encode('utf-8'), (self.unity_ip, self.unity_port))
+        except Exception as e:
+            self.get_logger().error(f'Error sending to Unity: {e}')
+
+    def send_sensor_visualization(self):
+        """Send sensor data for visualization in Unity."""
+        if not self.unity_socket:
+            return
+
+        # Prepare sensor visualization data
+        viz_data = {
+            'type': 'sensor_visualization',
+            'timestamp': time.time(),
+            'sensor_data': {
+                'laser_scan': self.get_recent_laser_scan(),
+                'camera_feed': self.get_recent_camera_image(),
+                'imu_orientation': self.robot_state['imu_data']['orientation'] if self.robot_state['imu_data'] else None
+            }
+        }
+
+        try:
+            json_data = json.dumps(viz_data)
+            self.unity_socket.sendto(json_data.encode('utf-8'), (self.unity_ip, self.unity_port))
+        except Exception as e:
+            self.get_logger().error(f'Error sending sensor viz to Unity: {e}')
+
+    def get_recent_laser_scan(self):
+        """Get recent laser scan data (placeholder)."""
+        # In a real implementation, you'd get this from a laser scan subscriber
+        return {'ranges': [1.0] * 360, 'intensities': [100] * 360}
+
+    def get_recent_camera_image(self):
+        """Get recent camera image data (placeholder)."""
+        # In a real implementation, you'd get this from a camera subscriber
+        return {'width': 640, 'height': 480, 'encoding': 'rgb8'}
+
+    def send_trajectory_visualization(self):
+        """Send trajectory data for visualization."""
+        if not self.unity_socket:
+            return
+
+        # Prepare trajectory visualization data
+        traj_data = {
+            'type': 'trajectory_visualization',
+            'timestamp': time.time(),
+            'trajectory': [
+                {'x': 0, 'y': 0, 'z': 0},
+                {'x': 1, 'y': 0, 'z': 0},
+                {'x': 2, 'y': 1, 'z': 0},
+                {'x': 3, 'y': 1, 'z': 0}
+            ]
+        }
+
+        try:
+            json_data = json.dumps(traj_data)
+            self.unity_socket.sendto(json_data.encode('utf-8'), (self.unity_ip, self.unity_port))
+        except Exception as e:
+            self.get_logger().error(f'Error sending trajectory viz to Unity: {e}')
+
+
+def main(args=None):
+    """Main function to run the Unity-ROS bridge."""
+    rclpy.init(args=args)
+
+    bridge = UnityROSBridge()
+
+    try:
+        bridge.get_logger().info('Unity-ROS Bridge started')
+        rclpy.spin(bridge)
+    except KeyboardInterrupt:
+        bridge.get_logger().info('Unity-ROS Bridge interrupted')
+    finally:
+        bridge.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+</Tabs>
+
+## Exercises and Checkpoints
+
+### Exercise 1: Simulation Integration Architecture
+
+**Scenario:** You're designing the integration architecture for a humanoid robot simulation system that needs to support:
+- Real-time physics simulation with Gazebo
+- High-quality visualization with Unity
+- ROS 2 control and planning systems
+- Multi-robot coordination scenarios
+- Human-robot interaction interfaces
+
+**Task:** Design an integration architecture that addresses all these requirements, including:
+- Data flow between components
+- Communication protocols and QoS settings
+- Performance optimization strategies
+- Error handling and recovery mechanisms
+
+**Success Criteria:**
+- [ ] Clear component architecture with defined interfaces
+- [ ] Appropriate communication patterns for each requirement
+- [ ] Performance considerations addressed
+- [ ] Robust error handling implemented
+
+### Exercise 2: Gazebo-ROS Integration Implementation
+
+**Objective:** Implement a complete Gazebo-ROS integration for a humanoid robot with proper sensor simulation and control.
+
+**Task:** Create the necessary configuration files and nodes to:
+- Spawn a humanoid robot model in Gazebo
+- Publish realistic sensor data (IMU, cameras, LiDAR)
+- Subscribe to joint control commands
+- Implement proper coordinate frame transformations
+- Validate simulation fidelity
+
+**Success Criteria:**
+- [ ] Robot successfully spawns in Gazebo
+- [ ] Sensor data published with realistic characteristics
+- [ ] Joint control commands properly received and executed
+- [ ] TF frames correctly published
+- [ ] Simulation validated against expected behavior
+
+### Self-Assessment Questions
+
+1. **Question:** What are the key components of Gazebo-ROS integration?
+   **Answer:** Key components include: sensor plugins that publish ROS messages, actuator plugins that subscribe to ROS commands, model plugins for custom behaviors, and the Gazebo-ROS bridge that handles communication.
+
+2. **Question:** How does Unity-ROS integration differ from Gazebo-ROS integration?
+   **Answer:** Unity-ROS integration typically uses network-based communication (TCP/UDP) through libraries like ROS#, while Gazebo-ROS integration is more direct through plugins. Unity focuses on visualization and interaction, while Gazebo focuses on physics simulation.
+
+3. **Question:** What are important considerations for simulation fidelity validation?
+   **Answer:** Important considerations include: comparing sensor data characteristics, validating control response times, checking physical parameter accuracy, ensuring proper timing synchronization, and verifying that behaviors transfer from sim to real.
+
+## Summary and Key Takeaways
+
+### Key Concepts Recap
+
+- **Integration Architecture**: Standardized patterns for connecting simulation and control systems
+- **Gazebo-ROS Bridge**: Direct plugin-based communication between simulation and ROS
+- **Unity-ROS Bridge**: Network-based communication for visualization and interaction
+- **Fidelity Validation**: Ensuring simulation matches real-world behavior
+- **Performance Optimization**: Balancing accuracy with computational efficiency
+
+### Practical Applications
+
+- **Development Acceleration**: Rapid testing of robot behaviors in simulation
+- **Safety Validation**: Testing dangerous scenarios without physical risk
+- **Human-Robot Interaction**: Intuitive interfaces for robot operation
+- **Multi-Robot Systems**: Coordinated simulation of multiple robots
+
+### Next Steps
+
+- **Module Progression:** Complete Module 2 with exercises and integration implementation
+- **Further Reading:** Explore advanced simulation techniques and domain randomization
+- **Practice Opportunities:** Implement complete simulation-integration for your robot
+
+### Common Mistakes and Troubleshooting
+
+- **Mistake 1:** Poor coordinate frame management → **Solution:** Implement proper TF tree and transformations
+- **Mistake 2:** Inadequate sensor simulation → **Solution:** Include realistic noise and limitations
+- **Mistake 3:** Unstable communication patterns → **Solution:** Use appropriate QoS settings and error handling
+
+### References and Resources
+
+- [Gazebo-ROS Bridge Documentation](https://gazebosim.org/docs/harmonic/ros_integration)
+- [Unity Robotics Hub](https://github.com/Unity-Technologies/Unity-Robotics-Hub)
+- [ROS 2 Control Integration](https://control.ros.org/)
+- [Simulation Best Practices](https://discourse.ros.org/c/simulation/)

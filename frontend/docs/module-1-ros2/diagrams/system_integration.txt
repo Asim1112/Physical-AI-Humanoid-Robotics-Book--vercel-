@@ -1,0 +1,282 @@
+# System Integration Architecture
+
+## Complete Humanoid Robot System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         HUMANOID ROBOT SYSTEM                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  HARDWARE LAYER:                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  Sensors:                    │  Actuators:                              ││
+│  │  • Cameras (RGB, Depth)     │  • Joint Motors (Servos, Actuators)     ││
+│  │  • IMU (Inertial Measurement│  • Grippers                              ││
+│  │  • LiDAR, Sonar             │  • LEDs, Displays                       ││
+│  │  • Force/Torque Sensors     │  • Audio Systems                         ││
+│  │  • Joint Encoders           │                                          ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│                              ▼                                              │
+│  FIRMWARE/DRIVER LAYER:                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Motor Drivers             │  • Sensor Interfaces                     ││
+│  │  • Communication Protocols   │  • Hardware Abstraction Layer          ││
+│  │  • Real-time Control         │  • ADC/DAC Interfaces                    ││
+│  │  • Safety Circuits           │                                          ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│                              ▼                                              │
+│  ROS 2 MIDDLEWARE LAYER:                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • DDS Implementation (FastDDS, CycloneDDS)                           ││
+│  │  • Message Routing & Discovery                                         ││
+│  │  • Quality of Service (QoS) Management                                ││
+│  │  • Parameter Server & Management                                       ││
+│  │  • Launch & Lifecycle Management                                       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│                              ▼                                              │
+│  ROS 2 NODE LAYER:                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  Perception Nodes │  Control Nodes │  Planning Nodes │  Interface Nodes││
+│  │  • Vision        │  • Balance     │  • Path         │  • Teleop       ││
+│  │  • SLAM          │  • Walking     │  • Motion       │  • GUI          ││
+│  │  • Object Det.   │  • Manipulation│  • Trajectory   │  • Web          ││
+│  │  • Localization  │  • Joint Ctrl  │  • Behavior     │  • Mobile       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│                              ▼                                              │
+│  APPLICATION LAYER:                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • High-level Behaviors (Walking, Talking, Manipulating)               ││
+│  │  • Task Planning & Execution                                           ││
+│  │  • Human-Robot Interaction                                             ││
+│  │  • Autonomous Operation                                                ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Behavior Manager Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      BEHAVIOR MANAGER SYSTEM                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Input Sources:                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Commands      │  │   Sensor        │  │   Parameters    │            │
+│  │   (Goals,       │  │   Data          │  │   (Configuration│            │
+│  │   Requests)     │  │   (Joint States,│  │   & Settings)   │            │
+│  │                 │  │   IMU, Cameras) │  │                 │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│         │                       │                       │                  │
+│         ▼                       ▼                       ▼                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │                     BEHAVIOR MANAGER                                  ││
+│  │                        (Central Coordinator)                          ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                     │                                     │
+│                                     ▼                                     │
+│  Decision Making:                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • State Machine Management                                           ││
+│  │  • Behavior Selection & Prioritization                                ││
+│  │  • Safety Check Integration                                         ││
+│  │  • Resource Allocation                                               ││
+│  │  • Task Scheduling                                                   ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                     │                                     │
+│                                     ▼                                     │
+│  Output Channels:                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Motion        │  │   Communication │  │   Monitoring    │            │
+│  │   Commands      │  │   & Services    │  │   & Logging     │            │
+│  │   (Joint,       │  │   (Status,      │  │   (Performance, │            │
+│  │   Velocity,     │  │   Feedback)     │  │   Diagnostics)  │            │
+│  │   Pose)         │  │                 │  │                 │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Safety System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SAFETY SYSTEM                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Safety Layers (from inner to outer):                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  HARDWARE SAFETY:                                                      ││
+│  │  • Motor current limits                                                ││
+│  │  • Temperature sensors                                                 ││
+│  │  • Emergency stops                                                     ││
+│  │  • Physical limits (mechanical)                                        ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  FIRMWARE SAFETY:                                                      ││
+│  │  • Joint position limits                                               ││
+│  │  • Velocity clamping                                                   ││
+│  │  • Watchdog timers                                                     ││
+│  │  • Real-time constraints                                               ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  ROS 2 NODE SAFETY:                                                    ││
+│  │  • Software position limits                                            ││
+│  │  • Collision detection                                                 ││
+│  │  • Balance monitoring                                                  ││
+│  │  • Communication timeouts                                              ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  APPLICATION SAFETY:                                                   ││
+│  │  • Behavior validation                                                 ││
+│  │  • Goal feasibility checking                                           ││
+│  │  • Multi-sensor fusion for safety                                      ││
+│  │  • Emergency behavior activation                                       ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                              │                                              │
+│  Safety Monitoring & Response:                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  • Continuous sensor monitoring                                       ││
+│  │  • State estimation (EKF, UKF, etc.)                                 ││
+│  │  • Anomaly detection                                                   ││
+│  │  • Graceful degradation procedures                                     ││
+│  │  • Emergency stop protocols                                            ││
+│  │  • Safe position recovery                                              ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Communication Architecture with QoS
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   COMMUNICATION ARCHITECTURE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Critical Control Loop (1000Hz):                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │ Joint Position  │  │   Joint         │  │   Joint         │            │
+│  │ Commands        │  │   Feedback      │  │   Control       │            │
+│  │ (High Priority) │  │   (High Priority)│  │   (High Priority)│            │
+│  │                 │  │                 │  │                 │            │
+│  │ QoS:            │  │ QoS:            │  │ QoS:            │            │
+│  │ - RELIABLE      │  │ - RELIABLE      │  │ - RELIABLE      │            │
+│  │ - KEEP_ALL      │  │ - KEEP_ALL      │  │ - KEEP_ALL      │            │
+│  │ - DEADLINE: 1ms │  │ - DEADLINE: 1ms │  │ - DEADLINE: 1ms │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│         │                       │                       │                  │
+│         └───────────────────────┼───────────────────────┘                  │
+│                                 ▼                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │                   ROS 2 MIDDLEWARE                                    ││
+│  │              (With Appropriate QoS Matching)                          ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  Sensor Data Streams (100Hz):                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   IMU Data      │  │ Camera Images   │  │   LiDAR         │            │
+│  │   (Medium       │  │   (Best Effort) │  │   Data (Best    │            │
+│  │   Priority)     │  │                 │  │   Effort)       │            │
+│  │                 │  │                 │  │                 │            │
+│  │ QoS:            │  │ QoS:            │  │ QoS:            │            │
+│  │ - BEST_EFFORT   │  │ - BEST_EFFORT   │  │ - BEST_EFFORT   │            │
+│  │ - KEEP_LAST     │  │ - KEEP_LAST     │  │ - KEEP_LAST     │            │
+│  │ - Depth: 5      │  │ - Depth: 10     │  │ - Depth: 10     │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│         │                       │                       │                  │
+│         └───────────────────────┼───────────────────────┘                  │
+│                                 ▼                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │                   ROS 2 MIDDLEWARE                                    ││
+│  │              (With Appropriate QoS Matching)                          ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  High-Level Commands (10Hz):                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐            │
+│  │   Navigation    │  │   Manipulation  │  │   Service       │            │
+│  │   Goals         │  │   Commands      │  │   Requests      │            │
+│  │   (Low Priority)│  │   (Low Priority)│  │   (Low Priority)│            │
+│  │                 │  │                 │  │                 │            │
+│  │ QoS:            │  │ QoS:            │  │ QoS:            │            │
+│  │ - RELIABLE      │  │ - RELIABLE      │  │ - RELIABLE      │            │
+│  │ - KEEP_LAST     │  │ - KEEP_LAST     │  │ - KEEP_LAST     │            │
+│  │ - Depth: 1      │  │ - Depth: 1      │  │ - Depth: 1      │            │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Launch File Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     LAUNCH FILE ARCHITECTURE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Launch File Structure:                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  <?xml version="1.0"?>  ← XML Declaration                              ││
+│  │  <launch>  ← Root launch element                                       ││
+│  │    │                                                                ││
+│  │    ▼                                                                ││
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      ││
+│  │  │   Arguments     │  │   Parameters    │  │   Remappings    │      ││
+│  │  │   (Configurable │  │   (System-wide  │  │   (Topic/Service│      ││
+│  │  │   Values)       │  │   Configuration)│  │   Renaming)     │      ││
+│  │  │                 │  │                 │  │                 │      ││
+│  │  │ <arg name="..." │  │ <param name=... │  │ <remap from=... │      ││
+│  │  │    default="..."/>│ │   value="..."/> │  │   to="..."/>   │      ││
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘      ││
+│  │         │                       │                       │            ││
+│  │         └───────────────────────┼───────────────────────┘            ││
+│  │                                 ▼                                    ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐││
+│  │  │                    NODE DEFINITIONS                           │││
+│  │  │                                                               │││
+│  │  │  <node pkg="pkg_name" exec="exec_name" name="node_name">     │││
+│  │  │    <param ... />  ← Node-specific parameters                 │││
+│  │  │    <remap ... />  ← Node-specific remappings                 │││
+│  │  │  </node>                                                      │││
+│  │  │                                                               │││
+│  │  │  Multiple nodes defined with proper startup order           │││
+│  │  └─────────────────────────────────────────────────────────────────┘││
+│  │                                 │                                    ││
+│  │                                 ▼                                    ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐││
+│  │  │                 CONDITIONS & GROUPS                           │││
+│  │  │  <group>  ← Group related nodes together                      │││
+│  │  │  <if>    ← Conditional node launching                        │││
+│  │  │  <unless>← Inverse conditional launching                    │││
+│  │  └─────────────────────────────────────────────────────────────────┘││
+│  │                                 │                                    ││
+│  │                                 ▼                                    ││
+│  │  ┌─────────────────────────────────────────────────────────────────┐││
+│  │  │                   INCLUDE OTHER LAUNCHES                      │││
+│  │  │  <include file="$(find-pkg-share other_pkg)/launch/file.py"/>│││
+│  │  └─────────────────────────────────────────────────────────────────┘││
+│  │  </launch>  ← Close root element                                   ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  Example System Launch:                                                     │
+│  Robot State + Controllers + Perception + Navigation                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  1. robot_state_publisher (URDF + joint states)                       ││
+│  │  2. joint_state_publisher_gui (for development)                       ││
+│  │  3. ros2_control_node (hardware interface)                            ││
+│  │  4. balance_controller (stability control)                            ││
+│  │  5. camera_driver (perception input)                                  ││
+│  │  6. navigation_node (path planning)                                   ││
+│  │  7. behavior_manager (high-level coordination)                        ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```

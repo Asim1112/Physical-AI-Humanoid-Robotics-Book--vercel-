@@ -1,0 +1,116 @@
+# ROS 2 Architecture Overview
+
+## High-Level Architecture
+
+<!-- Accessibility Description: This diagram shows the ROS 2 ecosystem with three main nodes (Node A as Publisher, Node B as Subscriber, and Node C as Service Server) communicating through Topics and Services, with the underlying ROS 2 middleware layer. -->
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ROS 2 Ecosystem                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
+│  │   Node A    │    │   Node B    │    │   Node C    │        │
+│  │             │    │             │    │             │        │
+│  │ [Publisher] │    │ [Subscriber]│    │ [Service   │        │
+│  │             │    │             │    │  Server]    │        │
+│  └─────────────┘    └─────────────┘    └─────────────┘        │
+│         │                   │                   │              │
+│         │ publishes         │ subscribes        │ provides     │
+│         └──────────┬────────┘                   │ services     │
+│                    │                            │              │
+│                    ▼                            ▼              │
+│              ┌─────────────┐              ┌─────────────┐      │
+│              │   Topic     │              │   Service   │      │
+│              │ /joint_data │              │ /robot_ctrl │      │
+│              └─────────────┘              └─────────────┘      │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                ROS 2 Middleware Layer                 │   │
+│  │  (DDS - Data Distribution Service Implementation)     │   │
+│  │  - Handles message routing                            │   │
+│  │  - Manages Quality of Service (QoS) settings          │   │
+│  │  - Provides discovery and connection management       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Middleware Components
+
+<!-- Accessibility Description: This diagram shows the ROS 2 middleware stack from top to bottom: Application Layer (Python/C++), Client Library (rcl), ROS 2 Core, DDS Implementation, and Network Layer. -->
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ROS 2 Middleware Stack                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐                                            │
+│  │   Application   │  ← Your Robot Code (Python/C++)          │
+│  │   Layer         │                                            │
+│  └─────────────────┘                                            │
+│            │                                                    │
+│            ▼                                                    │
+│  ┌─────────────────┐                                            │
+│  │   Client        │  ← rclpy/rclcpp libraries                 │
+│  │   Library (rcl) │                                            │
+│  └─────────────────┘                                            │
+│            │                                                    │
+│            ▼                                                    │
+│  ┌─────────────────┐                                            │
+│  │   ROS 2         │  ← ROS 2 Core (rclcpp, rclpy)             │
+│  │   Core          │                                            │
+│  └─────────────────┘                                            │
+│            │                                                    │
+│            ▼                                                    │
+│  ┌─────────────────┐                                            │
+│  │   DDS           │  ← DDS Implementation (FastDDS, etc.)     │
+│  │   Implementation│                                            │
+│  └─────────────────┘                                            │
+│            │                                                    │
+│            ▼                                                    │
+│  ┌─────────────────┐                                            │
+│  │   Network       │  ← TCP/IP, Shared Memory, etc.            │
+│  │   Layer         │                                            │
+│  └─────────────────┘                                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Humanoid Robot Application Example
+
+<!-- Accessibility Description: This diagram shows a humanoid robot ROS 2 system organized in three layers: Perception (Camera, LIDAR, IMU nodes), Control (Joint, Balance, Gait control nodes), and Planning (Motion, Path, Behavior nodes). Communication occurs through various ROS topics like /joint_states, /tf, and /cmd_vel. -->
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              Humanoid Robot ROS 2 System                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Perception Layer:                                              │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │
+│  │Camera Node  │ │LIDAR Node   │ │IMU Node     │              │
+│  │             │ │             │ │             │              │
+│  │publishes    │ │publishes    │ │publishes    │              │
+│  │/camera/image│ │/scan        │ │/imu/data    │              │
+│  └─────────────┘ └─────────────┘ └─────────────┘              │
+│                                                                 │
+│  Control Layer:                                                 │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │
+│  │Joint Ctrl   │ │Balance Ctrl │ │Gait Ctrl    │              │
+│  │Node          │ │Node         │ │Node         │              │
+│  │subscribes to │ │subscribes to│ │subscribes to│              │
+│  │/joint_cmd   │ │/imu/data    │ │/gait_plan   │              │
+│  └─────────────┘ └─────────────┘ └─────────────┘              │
+│                                                                 │
+│  Planning Layer:                                                │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │
+│  │Motion Plan  │ │Path Plan    │ │Behavior     │              │
+│  │Node          │ │Node         │ │Manager      │              │
+│  │provides      │ │provides     │ │coordinates  │              │
+│  │/plan_service │ │/nav_service │ │all layers   │              │
+│  └─────────────┘ └─────────────┘ └─────────────┘              │
+│                                                                 │
+│  Communication via Topics:                                      │
+│  /joint_states ← shared joint position information             │
+│  /tf          ← coordinate transforms                          │
+│  /cmd_vel     ← velocity commands                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```

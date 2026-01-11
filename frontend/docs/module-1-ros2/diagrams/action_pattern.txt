@@ -1,0 +1,203 @@
+# Action Communication Pattern (Goal-Feedback-Result)
+
+## Basic Action Client-Server Pattern
+
+```
+┌─────────────────┐                    ┌─────────────────┐
+│   Action        │                    │   Action        │
+│   Client        │                    │   Server        │
+│   Node          │                    │   Node          │
+│                 │                    │                 │
+│  ┌───────────┐  │    sends goal      │  ┌───────────┐  │
+│  │ Send      │  │   ┌─────────────┐  │  │ Wait for  │  │
+│  │ /walk_to  │  │───│ Action:     │──┼──│ goals for │  │
+│  │ goal      │  │   │ /walk_to    │  │  │ /walk_to  │  │
+│  │ (x=2, y=1)│  │   │ pose        │  │  │ action    │  │
+│  └───────────┘  │   └─────────────┘  │  │ processing│  │
+│                 │                    │  └───────────┘  │
+│  ┌───────────┐  │    receives        │  ┌───────────┐  │
+│  │ Wait &    │  │   ┌─────────────┐  │  │ Execute   │  │
+│  │ Receive   │  │◀──│ Feedback:   │◀─┼──│ goal and  │  │
+│  │ feedback  │  │   │ WalkToPose  │  │  │ publish   │  │
+│  │ & result  │  │   │ (progress,  │  │  │ feedback  │  │
+│  └───────────┘  │   │ pose, etc)  │  │  └───────────┘  │
+│                 │   └─────────────┘  │                 │
+│                 │                    │  ┌───────────┐  │
+│                 │    receives final   │  │ Send      │  │
+│                 │   ┌─────────────┐  │  │ result    │  │
+│                 │───│ Result:     │──┼──│ when      │  │
+│                 │   │ WalkToPose  │  │  │ complete  │  │
+│                 │   │ (success,   │  │  │           │  │
+│                 │   │ final_pose) │  │  └───────────┘  │
+│                 │   └─────────────┘  │                 │
+└─────────────────┘                    └─────────────────┘
+```
+
+## Action Communication Flow with Feedback
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              Action Goal-Feedback-Result Flow                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Time:  t0    t1     t2     t3     t4     t5     t6     t7    │
+│                                                                 │
+│  Client:                                                         │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  Send    Receive  Receive  Receive  Receive  Receive Final ││
+│  │  Goal    Feedback Feedback Feedback Feedback Result         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│        │         │        │        │        │        │         │
+│        ▼         ▼        ▼        ▼        ▼        ▼         │
+│  ┌─────────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ │
+│  │SendGoal │ │Recv   │ │Recv   │ │Recv   │ │Recv   │ │Recv   │ │
+│  │         │ │Feedback│ │Feedback│ │Feedback│ │Feedback│ │Result │ │
+│  └─────────┘ └───────┘ └───────┘ └───────┘ └───────┘ └───────┘ │
+│                                                                 │
+│  Server:                                                         │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  Receive Execute  Publish  Publish  Publish  Publish Final ││
+│  │  Goal     &       Feedback Feedback Feedback Feedback Result││
+│  │           Process &        &        &        &             ││
+│  │           Move    Update   Update   Update   Update         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│        ▲         │        │        │        │        │         │
+│        │         ▼        ▼        ▼        ▼        ▼         │
+│  ┌─────────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ │
+│  │Receive  │ │Execute │ │Publish │ │Publish │ │Publish │ │Publish│ │
+│  │Goal     │ │Action  │ │Feedback│ │Feedback│ │Feedback│ │Result │ │
+│  └─────────┘ └───────┘ └───────┘ └───────┘ └───────┘ └───────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Action States and Transitions
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  Action State Machine                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Action Client States:                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │   Goal Sent     │─▶│  Processing     │─▶│   Succeeded     │ │
+│  │   (Pending)     │  │   (Active)      │  │   (Result)      │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│         │                       │                       │      │
+│         ▼                       ▼                       ▲      │
+│  ┌─────────────────┐  ┌─────────────────┐              │      │
+│  │   Cancel        │  │   Cancel        │              │      │
+│  │   Requested     │  │   Requested     │              │      │
+│  └─────────────────┘  └─────────────────┘              │      │
+│         │                       │                       │      │
+│         └───────────────────────┼───────────────────────┘      │
+│                                 ▼                              │
+│  ┌─────────────────┐  ┌─────────────────┐                     │
+│  │   Cancelled     │  │   Aborted       │                     │
+│  │   (Result)      │  │   (Result)      │                     │
+│  └─────────────────┘  └─────────────────┘                     │
+│                                                                 │
+│  Action Server States:                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │   Waiting for   │─▶│   Processing    │─▶│   Succeeded     │ │
+│  │   Goal          │  │   Goal          │  │   (Send Result) │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│         │                       │                       │      │
+│         ▼                       ▼                       ▲      │
+│  ┌─────────────────┐  ┌─────────────────┐              │      │
+│  │   Accept Goal   │  │   Check for     │              │      │
+│  │   & Execute     │  │   Cancel Request│              │      │
+│  └─────────────────┘  └─────────────────┘              │      │
+│         │                       │                       │      │
+│         └───────────────────────┼───────────────────────┘      │
+│                                 ▼                              │
+│  ┌─────────────────┐  ┌─────────────────┐                     │
+│  │   Cancelled     │  │   Aborted       │                     │
+│  │   (Send Result) │  │   (Send Result) │                     │
+│  └─────────────────┘  └─────────────────┘                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Humanoid Robot Example: Walking Action
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              Humanoid Robot Walking Action                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Action Client (Navigation Node):                               │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Send Walk Goal:                                             ││
+│  │ Goal: WalkToPose                                            ││
+│  │ - target_pose: (x=5.0, y=3.0, theta=0.0)                  ││
+│  │ - step_size: 0.1                                            ││
+│  │ - max_steps: 100                                            ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                    │                                            │
+│                    ▼                                            │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ ROS 2 Middleware:                                           ││
+│  │ - Route goal to walk action server                          ││
+│  │ - Establish feedback/result communication channels          ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                    │                                            │
+│                    ▼                                            │
+│  Action Server (Walking Controller):                            │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Received Goal:                                              ││
+│  │ - Validate target pose (reachable, safe)                   ││
+│  │ - Accept goal and start execution                          ││
+│  │ - Begin walking motion                                       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                    │                                            │
+│                    ▼                                            │
+│  Feedback Loop (Continuous):                                    │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │ Walking         │  │ Update Position │  │ Publish         │ │
+│  │ Controller      │  │ & Check         │  │ Feedback        │ │
+│  │ Executes        │  │ Conditions      │  │ Message         │ │
+│  │ Steps           │  │ (obstacles,     │  │ - progress %    │ │
+│  │                 │  │ balance, etc)   │  │ - current pose  │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│         │                       │                       │      │
+│         └───────────────────────┼───────────────────────┘      │
+│                                 ▼                              │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ ROS 2 Middleware:                                           ││
+│  │ - Route feedback messages to client                         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                 │                              │
+│                                 ▼                              │
+│  Action Client (Navigation Node):                               │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Receive Feedback:                                           ││
+│  │ - progress_percentage: 45.2%                               ││
+│  │ - current_pose: (x=2.3, y=1.4, theta=0.1)                ││
+│  │ - status: "Walking... Step 23/50"                          ││
+│  │ - steps_completed: 23                                      ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                    │                                            │
+│                    ▼                                            │
+│  Optional: Client sends cancel request if needed                │
+│                    │                                            │
+│                    ▼                                            │
+│  Final Result:                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Action Server:                                              ││
+│  │ - Complete walking task                                     ││
+│  │ - Prepare result message                                    ││
+│  │ - Send final result to client                               ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                 │                              │
+│                                 ▼                              │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Action Client receives:                                     ││
+│  │ - success: true                                             ││
+│  │ - message: "Successfully walked to target in 48 steps"    ││
+│  │ - steps_taken: 48                                         ││
+│  │ - final_pose: (x=4.98, y=3.02, theta=0.05)              ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```

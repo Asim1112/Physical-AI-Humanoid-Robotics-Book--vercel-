@@ -1,0 +1,271 @@
+# Capstone Project: Building a Complete Humanoid Robot System
+
+## Overview
+
+The capstone project represents the culmination of your learning journey through Physical AI and Humanoid Robotics. You will integrate knowledge from all four modules to design, implement, and deploy a complete humanoid robot system capable of understanding natural language commands, perceiving its environment, and executing complex manipulation and navigation tasks.
+
+## Project Objectives
+
+By completing this capstone project, you will:
+- Design a complete system architecture integrating ROS 2, simulation, AI perception, and VLA
+- Implement a functional humanoid robot capable of real-world tasks
+- Deploy your system on physical or simulated hardware
+- Demonstrate robust performance across multiple scenarios
+- Document your design decisions and evaluate system performance
+
+## Project Scope
+
+### Core Requirements
+
+Your capstone project must include:
+
+1. **Robot Platform Integration** (Module 1)
+   - Complete ROS 2 system architecture
+   - URDF model with proper kinematics
+   - Joint control and state estimation
+   - Sensor integration (cameras, IMU, force sensors)
+
+2. **Digital Twin and Simulation** (Module 2)
+   - Gazebo physics simulation
+   - Unity visualization (optional)
+   - Simulation-reality transfer validation
+   - Testing environment for development
+
+3. **AI Perception and Navigation** (Module 3)
+   - Visual SLAM for localization and mapping
+   - Object detection and tracking
+   - Bipedal navigation system
+   - Path planning with balance constraints
+
+4. **Vision-Language-Action** (Module 4)
+   - Natural language command interface
+   - Vision-language grounding
+   - Multimodal perception fusion
+   - Action generation from language
+
+## Project Deliverables
+
+### 1. System Design Document
+- Architecture overview and component diagram
+- Hardware/software specifications
+- Integration strategy
+- Safety considerations
+- Performance requirements
+
+### 2. Implementation
+- Complete codebase with documentation
+- ROS 2 packages and launch files
+- AI models (trained or fine-tuned)
+- Simulation environment
+- Configuration files
+
+### 3. Demonstration
+- Video demonstration of key capabilities
+- Live demonstration (if using physical robot)
+- Performance benchmarks
+- Failure analysis
+
+### 4. Final Report
+- Technical report (15-20 pages)
+- Design rationale and trade-offs
+- Implementation challenges and solutions
+- Performance evaluation
+- Future improvements
+
+## Suggested Project Themes
+
+### Theme 1: Service Robot Assistant
+Build a humanoid service robot for household or office tasks:
+- **Commands**: "Bring me a coffee", "Clean the table", "Find my keys"
+- **Skills**: Object manipulation, navigation, human interaction
+- **Challenges**: Dynamic environments, object recognition, safe human interaction
+
+### Theme 2: Manufacturing Cobot
+Create a collaborative robot for manufacturing:
+- **Commands**: "Assemble component A to B", "Inspect the part", "Place in bin 3"
+- **Skills**: Precision manipulation, quality inspection, workspace sharing
+- **Challenges**: High precision, safety, task sequencing
+
+### Theme 3: Educational Companion
+Develop an interactive educational robot:
+- **Commands**: "Show me how to tie shoes", "Demonstrate the experiment", "Point to the answer"
+- **Skills**: Gesture control, demonstration, pointing, educational interaction
+- **Challenges**: Natural interaction, adaptive behavior, engagement
+
+### Theme 4: Healthcare Assistant
+Build a robot for healthcare support:
+- **Commands**: "Help patient stand up", "Bring medication", "Monitor vital signs"
+- **Skills**: Physical assistance, medication delivery, monitoring
+- **Challenges**: Safety-critical operation, gentle interaction, reliability
+
+### Theme 5: Warehouse Automation
+Create a humanoid for warehouse operations:
+- **Commands**: "Pick item from shelf B3", "Sort packages by size", "Load the cart"
+- **Skills**: Navigation in structured environments, bin picking, sorting
+- **Challenges**: High throughput, accuracy, robustness
+
+## Project Timeline
+
+### Week 1-2: Planning and Design
+- Choose project theme
+- Define specific use cases and requirements
+- Design system architecture
+- Plan integration strategy
+- Set up development environment
+
+### Week 3-5: Core Implementation
+- Implement ROS 2 system architecture
+- Set up simulation environment
+- Develop basic perception pipeline
+- Implement navigation system
+- Initial VLA integration
+
+### Week 6-7: Advanced Features
+- Refine VLA model for your application
+- Implement multimodal fusion
+- Add safety systems
+- Optimize performance
+- Handle edge cases
+
+### Week 8-9: Testing and Validation
+- Simulation testing
+- Real robot testing (if applicable)
+- Performance benchmarking
+- User studies (optional)
+- Bug fixes and refinements
+
+### Week 10: Documentation and Presentation
+- Complete technical report
+- Create demonstration video
+- Prepare presentation materials
+- Final system polish
+- Submission
+
+## Evaluation Criteria
+
+### Technical Implementation (40%)
+- **System Architecture** (10%): Well-designed, modular, scalable
+- **ROS 2 Integration** (10%): Proper use of nodes, topics, services, actions
+- **AI/ML Components** (10%): Effective perception and VLA implementation
+- **Code Quality** (10%): Clean, documented, maintainable code
+
+### Functionality (30%)
+- **Core Features** (15%): All required capabilities implemented
+- **Robustness** (10%): Handles errors and edge cases gracefully
+- **Performance** (5%): Meets real-time requirements
+
+### Innovation and Creativity (15%)
+- Novel approaches to challenges
+- Creative solutions to problems
+- Additional features beyond requirements
+- Advanced techniques implementation
+
+### Documentation and Presentation (15%)
+- **Technical Report** (8%): Clear, comprehensive, well-written
+- **Code Documentation** (4%): Inline comments, README, API docs
+- **Demonstration** (3%): Clear showcase of capabilities
+
+## Resources and Support
+
+### Development Resources
+- ROS 2 Humble/Iron documentation
+- Gazebo simulation tutorials
+- NVIDIA Isaac resources
+- Hugging Face model hub
+- OpenCV and computer vision libraries
+
+### Hardware Options
+- **Simulation Only**: Gazebo + Unity (no hardware required)
+- **Budget Option**: Raspberry Pi + camera + servos (DIY humanoid)
+- **Mid-Range**: NAO, Pepper (if available through institution)
+- **Advanced**: Custom humanoid platform, Boston Dynamics Spot
+
+### Support Channels
+- Weekly office hours with instructors
+- Project discussion forum
+- Peer code review sessions
+- Technical Q&A sessions
+
+## Example Project Structure
+
+```
+humanoid-capstone/
+├── README.md
+├── docs/
+│   ├── design_document.md
+│   ├── user_manual.md
+│   └── final_report.pdf
+├── src/
+│   ├── robot_description/
+│   │   ├── urdf/
+│   │   ├── meshes/
+│   │   └── config/
+│   ├── perception/
+│   │   ├── vision/
+│   │   ├── slam/
+│   │   └── object_detection/
+│   ├── navigation/
+│   │   ├── path_planning/
+│   │   ├── footstep_planning/
+│   │   └── balance_control/
+│   ├── vla/
+│   │   ├── models/
+│   │   ├── inference/
+│   │   └── grounding/
+│   └── integration/
+│       ├── safety/
+│       ├── state_machine/
+│       └── mission_control/
+├── launch/
+│   ├── simulation.launch.py
+│   ├── robot.launch.py
+│   └── full_system.launch.py
+├── config/
+│   ├── robot_config.yaml
+│   ├── perception_config.yaml
+│   ├── navigation_config.yaml
+│   └── vla_config.yaml
+├── models/
+│   ├── vla_model.pt
+│   ├── object_detector.onnx
+│   └── slam_config.yaml
+├── simulation/
+│   ├── worlds/
+│   ├── models/
+│   └── scripts/
+└── tests/
+    ├── unit_tests/
+    ├── integration_tests/
+    └── performance_tests/
+```
+
+## Success Criteria
+
+A successful capstone project will:
+- ✅ Execute at least 3 distinct tasks from natural language commands
+- ✅ Navigate autonomously in a structured environment
+- ✅ Manipulate at least 2 different object types
+- ✅ Maintain balance during dynamic movements
+- ✅ Run in real-time with acceptable latency (&lt;500ms for commands)
+- ✅ Handle at least 2 common failure modes gracefully
+- ✅ Be well-documented with clear setup instructions
+- ✅ Demonstrate learned concepts from all 4 modules
+
+## Getting Started
+
+1. **Review Prerequisites**: Ensure you've completed all 4 modules
+2. **Choose Theme**: Select a project theme that interests you
+3. **Form Team**: Individual or teams of 2-3 students
+4. **Initial Meeting**: Schedule meeting with instructor to discuss plans
+5. **Begin Design**: Start with system design document
+6. **Set Up Environment**: Install all necessary software and tools
+7. **Iterate**: Build incrementally, test frequently, document continuously
+
+The capstone project is your opportunity to showcase everything you've learned and create a portfolio-worthy humanoid robotics system. Approach it methodically, be creative, and don't hesitate to seek help when needed!
+
+## Next Steps
+
+Proceed to the following sections for detailed guidance:
+- **System Design**: Architecture and component selection
+- **Implementation Guide**: Step-by-step development process
+- **Edge Deployment**: Optimization and deployment strategies

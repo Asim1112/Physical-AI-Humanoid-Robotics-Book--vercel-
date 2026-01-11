@@ -1,0 +1,765 @@
+# Isaac AI Pipeline Integration
+
+## Overview
+
+This guide provides comprehensive instructions for integrating NVIDIA Isaac components into a complete AI pipeline for humanoid robots. The integration encompasses perception, planning, control, and learning systems optimized for NVIDIA's hardware acceleration platform.
+
+## Isaac Platform Architecture
+
+The Isaac platform provides several key components for AI-powered robotics:
+
+### Isaac ROS Packages
+- **Isaac ROS Visual SLAM**: GPU-accelerated visual SLAM
+- **Isaac ROS Detection**: AI-based object detection
+- **Isaac ROS Point Cloud**: 3D point cloud processing
+- **Isaac ROS Manipulation**: Robot manipulation capabilities
+- **Isaac ROS Navigation**: GPU-accelerated navigation
+
+### Isaac Sim and Isaac Gym
+- **Isaac Sim**: High-fidelity simulation environment
+- **Isaac Gym**: GPU-accelerated RL environments
+- **Domain Randomization**: Techniques for sim-to-real transfer
+
+## Complete AI Pipeline Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   SENSORS       │    │   ISAAC         │    │   PERCEPTION    │
+│                 │───►│   PREPROCESSING │───►│   PROCESSING    │
+│ • Cameras       │    │ • Image Rect.   │    │ • Feature Det.  │
+│ • LiDAR         │    │ • Calibration   │    │ • Object Det.   │
+│ • IMU           │    │ • Synchronization│   │ • SLAM          │
+│ • Joint Enc.    │    │ • GPU Transfer  │    │ • Mapping       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │                        │
+                              ▼                        ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   TENSORRT      │    │   PLANNING      │    │   CONTROL       │
+│   INFERENCE     │───►│   & REASONING   │───►│   & EXECUTION   │
+│                 │    │ • Path Planning │    │ • Trajectory    │
+│ • Optimized     │    │ • Behavior      │    │   Generation    │
+│   Models        │    │ • Decision      │    │ • Balance Ctrl  │
+│ • GPU Acceler.  │    │   Making        │    │ • Safety Sys.   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## Isaac ROS Package Integration
+
+### Visual SLAM Integration
+
+```yaml
+# visual_slam_pipeline.yaml
+visual_slam:
+  package: "isaac_ros_visual_slam"
+  parameters:
+    enable_rectification: true
+    rectified_images_output_topic: "/stereo_camera/rectified_images"
+    enable_debug_mode: false
+    enable_mapping: true
+    enable_localization: true
+    enable_occupancy_map: true
+    occupancy_map_resolution: 0.05
+    map_frame: "map"
+    tracking_frame: "base_link"
+    publish_odom_tf: true
+    publish_map_odom_tf: true
+    publish_point_cloud: true
+    point_cloud_output_topic: "/visual_slam/pointcloud"
+    max_num_landmarks: 1000
+    max_num_frames_in_map: 100
+    min_num_features: 50
+    max_num_features: 1000
+    gpu_id: 0
+    image_input_width: 640
+    image_input_height: 480
+    camera_matrix: [320.0, 0.0, 320.0, 0.0, 320.0, 240.0, 0.0, 0.0, 1.0]
+```
+
+### Object Detection Integration
+
+```yaml
+# object_detection_pipeline.yaml
+object_detection:
+  detectnet:
+    package: "isaac_ros_detectnet"
+    parameters:
+      input_topic: "/camera/rgb/image_raw"
+      output_topic: "/detections"
+      model_name: "ssd_mobilenet_v2_coco"
+      confidence_threshold: 0.5
+      enable_profiling: false
+      input_tensor: "input_tensor"
+      input_layer_width: 300
+      input_layer_height: 300
+      output_layer_names: ["scores", "boxes", "classes"]
+      engine_cache_path: "/tmp/detectnet.plan"
+      force_engine_update: false
+      input_format: "bgr8"
+      publish_to_topic: true
+      publish_to_topic_name: "/detections"
+      gpu_id: 0
+      class_labels_file: "/path/to/coco_labels.txt"
+      colormap_file: "/path/to/colormap.txt"
+```
+
+## Launch File Configuration
+
+### Complete Isaac Pipeline Launch
+
+```python
+# launch/isaac_ai_pipeline.launch.py
+import os
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler
+from launch.event_handlers import OnProcessStart
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
+
+def generate_launch_description():
+    # Declare launch arguments
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+    camera_namespace = LaunchConfiguration('camera_namespace', default='/camera')
+    robot_namespace = LaunchConfiguration('robot_namespace', default='')
+
+    # Visual SLAM node
+    visual_slam_node = Node(
+        package='isaac_ros_visual_slam',
+        executable='visual_slam_node',
+        namespace=robot_namespace,
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'enable_rectification': True,
+            'map_frame': 'map',
+            'tracking_frame': 'base_link',
+            'publish_odom_tf': True,
+            'enable_occupancy_map': True
+        }],
+        remappings=[
+            ('/visual_slam/image_raw', [camera_namespace, '/rgb/image_raw']),
+            ('/visual_slam/camera_info', [camera_namespace, '/rgb/camera_info'])
+        ]
+    )
+
+    # Object detection node
+    detectnet_node = Node(
+        package='isaac_ros_detectnet',
+        executable='detectnet_node',
+        namespace=robot_namespace,
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'model_name': 'ssd_mobilenet_v2_coco',
+            'confidence_threshold': 0.5,
+            'input_layer_width': 300,
+            'input_layer_height': 300
+        }],
+        remappings=[
+            ('/image', [camera_namespace, '/rgb/image_raw']),
+            ('/detections', 'object_detections')
+        ]
+    )
+
+    # Point cloud processing node
+    point_cloud_node = Node(
+        package='isaac_ros_point_cloud_utils',
+        executable='point_cloud_node',
+        namespace=robot_namespace,
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'queue_size': 1
+        }],
+        remappings=[
+            ('/depth/image', [camera_namespace, '/depth/image_raw']),
+            ('/camera_info', [camera_namespace, '/depth/camera_info']),
+            ('/point_cloud', 'processed_pointcloud')
+        ]
+    )
+
+    # Navigation stack
+    nav2_bringup_launch_dir = os.path.join(
+        get_package_share_directory('nav2_bringup'), 'launch'
+    )
+
+    navigation_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(nav2_bringup_launch_dir, 'navigation_launch.py')
+        ),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'params_file': os.path.join(
+                get_package_share_directory('my_robot_bringup'),
+                'config', 'isaac_navigation.yaml'
+            )
+        }.items()
+    )
+
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'use_sim_time',
+            default_value='false',
+            description='Use simulation (Gazebo) clock if true'
+        ),
+        DeclareLaunchArgument(
+            'camera_namespace',
+            default_value='/camera',
+            description='Namespace for camera topics'
+        ),
+        DeclareLaunchArgument(
+            'robot_namespace',
+            default_value='',
+            description='Namespace for robot nodes'
+        ),
+        visual_slam_node,
+        detectnet_node,
+        point_cloud_node,
+        navigation_launch
+    ])
+```
+
+## GPU Optimization and TensorRT Integration
+
+### TensorRT Model Optimization
+
+```python
+# tensorrt_optimizer.py
+import torch
+import torch_tensorrt
+
+class TensorRTOptimizer:
+    def __init__(self):
+        self.optimized_models = {}
+
+    def optimize_model(self, model, model_name, input_shapes):
+        """
+        Optimize PyTorch model using TensorRT for GPU acceleration.
+        """
+        # Compile model with TensorRT
+        optimized_model = torch_tensorrt.compile(
+            model,
+            inputs=input_shapes,
+            enabled_precisions={torch.float, torch.half},  # FP32 and FP16
+            workspace_size=2000000000,  # 2GB workspace
+            max_batch_size=16,
+            device=0  # GPU device ID
+        )
+
+        self.optimized_models[model_name] = optimized_model
+        return optimized_model
+
+    def optimize_detection_model(self, detection_model):
+        """
+        Optimize object detection model specifically.
+        """
+        input_shape = [
+            torch_tensorrt.Input(
+                min_shape=[1, 3, 224, 224],
+                opt_shape=[8, 3, 224, 224],
+                max_shape=[16, 3, 224, 224]
+            )
+        ]
+
+        return self.optimize_model(detection_model, "detection_model", input_shape)
+
+    def optimize_control_model(self, control_model):
+        """
+        Optimize control system model.
+        """
+        input_shape = [
+            torch_tensorrt.Input(
+                min_shape=[1, 24],
+                opt_shape=[32, 24],
+                max_shape=[64, 24]
+            )
+        ]
+
+        return self.optimize_model(control_model, "control_model", input_shape)
+```
+
+### CUDA Memory Management
+
+```python
+# cuda_manager.py
+import torch
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.tools import PageLockedMemoryPool, DeviceMemoryPool
+
+class CUDAManager:
+    def __init__(self, memory_fraction=0.8):
+        # Initialize CUDA
+        self.gpu_id = 0
+        self.memory_fraction = memory_fraction
+
+        # Set memory fraction
+        torch.cuda.set_per_process_memory_fraction(memory_fraction, device=self.gpu_id)
+
+        # Initialize memory pools
+        self.pinned_memory_pool = PageLockedMemoryPool(
+            page_size=4096,
+            alloc_fun=cuda.pagelocked_empty,
+            free_fun=None
+        )
+
+        self.device_memory_pool = DeviceMemoryPool(
+            alloc_fun=lambda size: cuda.mem_alloc(size),
+            free_fun=cuda.mem_free
+        )
+
+    def allocate_tensor(self, shape, dtype=torch.float32):
+        """Allocate tensor on GPU with memory management."""
+        tensor = torch.empty(shape, dtype=dtype, device=f'cuda:{self.gpu_id}')
+        return tensor
+
+    def copy_to_gpu(self, host_array):
+        """Copy data to GPU with memory management."""
+        gpu_tensor = torch.from_numpy(host_array).cuda(self.gpu_id)
+        return gpu_tensor
+
+    def get_memory_stats(self):
+        """Get current GPU memory usage."""
+        memory_stats = {
+            'allocated': torch.cuda.memory_allocated(self.gpu_id),
+            'reserved': torch.cuda.memory_reserved(self.gpu_id),
+            'max_allocated': torch.cuda.max_memory_allocated(self.gpu_id),
+            'max_reserved': torch.cuda.max_memory_reserved(self.gpu_id)
+        }
+        return memory_stats
+```
+
+## Isaac Sim Integration for Training
+
+### Isaac Sim Configuration
+
+```python
+# isaac_sim_config.py
+from omni.isaac.orbit_assets.anymal import ANYMAL_C_CFG
+from omni.isaac.orbit_assets.humanoid import HUMANOID_CFG
+from omni.isaac.orbit.managers import Curriculum
+from omni.isaac.orbit.envs import RLGameVecEnvCfg
+import torch
+
+class IsaacSimHumanoidConfig:
+    def __init__(self):
+        self.task = {
+            "name": "HumanoidLocomotion",
+            "physics_dt": 0.005,  # 200 Hz physics
+            "render_dt": 1.0/60.0,  # 60 Hz rendering
+            "decimation": 4,  # 50 Hz control (200Hz/4)
+            "env_spacing": 5.0,
+            "num_envs": 4096,
+            "max_episode_length": 1000,
+            "asset_cfg": HUMANOID_CFG,
+        }
+
+        self.sim = {
+            "gravity": [0.0, 0.0, -9.81],
+            "physics_engine": "physx",
+            "use_gpu_pipeline": True,
+            "device": "cuda:0",
+            "headless": True,
+        }
+
+        self.observations = {
+            "policy": {
+                "scale": 1.0,
+                "noise": 0.1,
+                "noise_type": "gaussian",
+            }
+        }
+
+        self.actions = {
+            "scale": 0.5,
+            "noise": 0.1,
+            "noise_type": "gaussian",
+        }
+
+        self.rewards = {
+            "tracking_sigma": 0.25,
+            "vel_deviation_penalty": -1.0,
+            "dof_acc_penalty": -1e-7,
+            "action_rate_penalty": -0.01,
+            "foot_height_penalty": -0.0,
+            "foot_slip_penalty": -0.1,
+            "torque_penalty": -1e-5,
+            "stand_still_penalty": -2.0,
+        }
+
+        self.domain_rand = {
+            "randomize_friction": True,
+            "friction_range": [0.5, 1.5],
+            "randomize_base_mass": True,
+            "added_mass_range": [-1.0, 1.0],
+            "randomize_com": True,
+            "com_range": [-0.05, 0.05],
+            "randomize_gains": True,
+            "stiffness_range": [0.9, 1.1],
+            "damping_range": [0.9, 1.1],
+        }
+
+    def create_env_cfg(self):
+        """Create environment configuration for Isaac Sim."""
+        from omni.isaac.orbit.envs.mdp import observations, actions, rewards, terminations
+        from omni.isaac.orbit.assets import ArticulationCfg
+
+        class HumanoidEnvCfg(RLGameVecEnvCfg):
+            def __init__(self, cfg):
+                super().__init__(cfg)
+
+                # Define observation space
+                self.observation_space = {
+                    "joint_pos": {"dim": 12, "scale": 1.0},
+                    "joint_vel": {"dim": 12, "scale": 0.1},
+                    "base_lin_vel": {"dim": 3, "scale": 2.0},
+                    "base_ang_vel": {"dim": 3, "scale": 0.25},
+                    "commands": {"dim": 3, "scale": 1.0},
+                    "actions": {"dim": 12, "scale": 1.0},
+                }
+
+                # Define action space
+                self.action_space = {
+                    "joint_pos_target": {"dim": 12, "scale": 1.0}
+                }
+
+        return HumanoidEnvCfg(self.task)
+```
+
+## Performance Monitoring and Optimization
+
+### Isaac Performance Monitor
+
+```python
+# performance_monitor.py
+import psutil
+import GPUtil
+import time
+import threading
+from collections import deque
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import Temperature
+import torch
+
+class IsaacPerformanceMonitor(Node):
+    def __init__(self):
+        super().__init__('isaac_performance_monitor')
+
+        # Declare parameters
+        self.declare_parameter('monitor_frequency', 10.0)
+        self.declare_parameter('cpu_threshold', 80.0)
+        self.declare_parameter('gpu_threshold', 85.0)
+        self.declare_parameter('memory_threshold', 80.0)
+
+        # Get parameters
+        self.monitor_frequency = self.get_parameter('monitor_frequency').value
+        self.cpu_threshold = self.get_parameter('cpu_threshold').value
+        self.gpu_threshold = self.get_parameter('gpu_threshold').value
+        self.memory_threshold = self.get_parameter('memory_threshold').value
+
+        # Performance tracking
+        self.cpu_history = deque(maxlen=100)
+        self.gpu_history = deque(maxlen=100)
+        self.memory_history = deque(maxlen=100)
+        self.gpu_memory_history = deque(maxlen=100)
+
+        # Publishers
+        self.performance_pub = self.create_publisher(
+            Float64MultiArray, '/isaac/performance_metrics', 10)
+        self.temperature_pub = self.create_publisher(
+            Temperature, '/hardware/temperature', 10)
+
+        # Timer for monitoring
+        self.monitor_timer = self.create_timer(
+            1.0 / self.monitor_frequency, self.monitor_performance)
+
+        self.get_logger().info('Isaac Performance Monitor initialized')
+
+    def monitor_performance(self):
+        """Monitor system performance metrics."""
+        metrics = []
+
+        # CPU usage
+        cpu_percent = psutil.cpu_percent(interval=None)
+        self.cpu_history.append(cpu_percent)
+        metrics.append(cpu_percent)
+
+        # Memory usage
+        memory_percent = psutil.virtual_memory().percent
+        self.memory_history.append(memory_percent)
+        metrics.append(memory_percent)
+
+        # GPU usage and temperature
+        gpus = GPUtil.getGPUs()
+        if gpus:
+            gpu = gpus[0]  # First GPU
+            gpu_load = gpu.load * 100
+            gpu_memory = gpu.memoryUtil * 100
+            gpu_temp = gpu.temperature
+
+            self.gpu_history.append(gpu_load)
+            self.gpu_memory_history.append(gpu_memory)
+
+            metrics.extend([gpu_load, gpu_memory, gpu_temp])
+
+            # Publish temperature
+            temp_msg = Temperature()
+            temp_msg.header.stamp = self.get_clock().now().to_msg()
+            temp_msg.header.frame_id = 'gpu_0'
+            temp_msg.temperature = gpu_temp
+            temp_msg.variance = 0.0
+            self.temperature_pub.publish(temp_msg)
+        else:
+            # No GPU detected
+            metrics.extend([0.0, 0.0, 0.0])
+
+        # GPU memory (PyTorch)
+        if torch.cuda.is_available():
+            gpu_memory_allocated = torch.cuda.memory_allocated() / 1024**3  # GB
+            gpu_memory_cached = torch.cuda.memory_reserved() / 1024**3  # GB
+            metrics.extend([gpu_memory_allocated, gpu_memory_cached])
+        else:
+            metrics.extend([0.0, 0.0])
+
+        # Publish performance metrics
+        perf_msg = Float64MultiArray()
+        perf_msg.data = metrics
+        self.performance_pub.publish(perf_msg)
+
+        # Check for performance issues
+        self.check_performance_alerts(cpu_percent, gpu_load if gpus else 0, memory_percent)
+
+    def check_performance_alerts(self, cpu_percent, gpu_percent, memory_percent):
+        """Check for performance threshold violations."""
+        alerts = []
+
+        if cpu_percent > self.cpu_threshold:
+            alerts.append(f'CPU usage high: {cpu_percent:.1f}% > {self.cpu_threshold}%')
+
+        if gpu_percent > self.gpu_threshold:
+            alerts.append(f'GPU usage high: {gpu_percent:.1f}% > {self.gpu_threshold}%')
+
+        if memory_percent > self.memory_threshold:
+            alerts.append(f'Memory usage high: {memory_percent:.1f}% > {self.memory_threshold}%')
+
+        if alerts:
+            alert_msg = '; '.join(alerts)
+            self.get_logger().warn(f'Performance Alert: {alert_msg}')
+
+    def get_performance_summary(self):
+        """Get summary of performance metrics."""
+        summary = {
+            'cpu_avg': sum(self.cpu_history) / len(self.cpu_history) if self.cpu_history else 0,
+            'gpu_avg': sum(self.gpu_history) / len(self.gpu_history) if self.gpu_history else 0,
+            'memory_avg': sum(self.memory_history) / len(self.memory_history) if self.memory_history else 0,
+            'gpu_memory_avg': sum(self.gpu_memory_history) / len(self.gpu_memory_history) if self.gpu_memory_history else 0,
+            'cpu_peak': max(self.cpu_history) if self.cpu_history else 0,
+            'gpu_peak': max(self.gpu_history) if self.gpu_history else 0,
+        }
+        return summary
+```
+
+## Safety and Robustness Integration
+
+### Isaac Safety Manager
+
+```python
+# safety_manager.py
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState, Imu
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool, String
+import numpy as np
+import time
+
+class IsaacSafetyManager(Node):
+    def __init__(self):
+        super().__init__('isaac_safety_manager')
+
+        # Declare parameters
+        self.declare_parameter('safety_check_frequency', 100.0)
+        self.declare_parameter('balance_threshold', 0.2)  # meters
+        self.declare_parameter('velocity_threshold', 1.0)  # m/s
+        self.declare_parameter('joint_limit_threshold', 0.95)  # 95% of limits
+        self.declare_parameter('emergency_stop_timeout', 0.5)  # seconds
+
+        # Get parameters
+        self.safety_check_frequency = self.get_parameter('safety_check_frequency').value
+        self.balance_threshold = self.get_parameter('balance_threshold').value
+        self.velocity_threshold = self.get_parameter('velocity_threshold').value
+        self.joint_limit_threshold = self.get_parameter('joint_limit_threshold').value
+        self.emergency_stop_timeout = self.get_parameter('emergency_stop_timeout').value
+
+        # Robot state
+        self.joint_states = None
+        self.imu_data = None
+        self.last_command_time = time.time()
+        self.safety_engaged = False
+
+        # Joint limits (example values - should be loaded from URDF)
+        self.joint_limits = {
+            'hip_joint': {'min': -1.57, 'max': 1.57},
+            'knee_joint': {'min': -0.1, 'max': 2.4},
+            'ankle_joint': {'min': -0.8, 'max': 0.8}
+        }
+
+        # Subscribers
+        self.joint_sub = self.create_subscription(
+            JointState, '/joint_states', self.joint_callback, 10)
+        self.imu_sub = self.create_subscription(
+            Imu, '/imu/data', self.imu_callback, 10)
+        self.cmd_vel_sub = self.create_subscription(
+            Twist, '/cmd_vel', self.cmd_vel_callback, 10)
+
+        # Publishers
+        self.emergency_stop_pub = self.create_publisher(Bool, '/emergency_stop', 10)
+        self.safety_status_pub = self.create_publisher(String, '/safety/status', 10)
+
+        # Timer for safety checks
+        self.safety_timer = self.create_timer(
+            1.0 / self.safety_check_frequency, self.safety_check)
+
+        self.get_logger().info('Isaac Safety Manager initialized')
+
+    def joint_callback(self, msg):
+        """Update joint state information."""
+        self.joint_states = msg
+
+    def imu_callback(self, msg):
+        """Update IMU data for balance monitoring."""
+        self.imu_data = msg
+
+    def cmd_vel_callback(self, msg):
+        """Update command time for timeout monitoring."""
+        self.last_command_time = time.time()
+
+    def safety_check(self):
+        """Perform comprehensive safety checks."""
+        if self.safety_engaged:
+            return
+
+        issues = []
+
+        # Balance check using IMU data
+        if self.imu_data:
+            balance_issue = self.check_balance()
+            if balance_issue:
+                issues.append(balance_issue)
+
+        # Joint limit check
+        if self.joint_states:
+            joint_issue = self.check_joint_limits()
+            if joint_issue:
+                issues.append(joint_issue)
+
+        # Velocity check
+        if self.joint_states:
+            velocity_issue = self.check_velocities()
+            if velocity_issue:
+                issues.append(velocity_issue)
+
+        # Command timeout check
+        time_since_command = time.time() - self.last_command_time
+        if time_since_command > self.emergency_stop_timeout:
+            issues.append(f'Command timeout: {time_since_command:.2f}s')
+
+        # Handle safety issues
+        if issues:
+            self.trigger_safety_procedure(issues)
+
+    def check_balance(self):
+        """Check robot balance using IMU data."""
+        # Extract orientation from IMU
+        orientation = self.imu_data.orientation
+        w, x, y, z = orientation.w, orientation.x, orientation.y, orientation.z
+
+        # Convert quaternion to roll/pitch
+        sinr_cosp = 2 * (w * x + y * z)
+        cosr_cosp = 1 - 2 * (x * x + y * y)
+        roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2 * (w * y - z * x)
+        pitch = np.arcsin(sinp)
+
+        # Check if tilt exceeds threshold
+        tilt_magnitude = np.sqrt(roll * roll + pitch * pitch)
+        if tilt_magnitude > self.balance_threshold:
+            return f'Balance exceeded: tilt={tilt_magnitude:.3f} > threshold={self.balance_threshold}'
+
+        return None
+
+    def check_joint_limits(self):
+        """Check if joints are within safe limits."""
+        for i, joint_name in enumerate(self.joint_states.name):
+            if joint_name in self.joint_limits:
+                position = self.joint_states.position[i]
+                limits = self.joint_limits[joint_name]
+
+                # Calculate safety margin
+                range_size = limits['max'] - limits['min']
+                safety_margin = range_size * (1 - self.joint_limit_threshold)
+
+                if (position < limits['min'] + safety_margin or
+                    position > limits['max'] - safety_margin):
+                    return f'Joint limit warning: {joint_name}={position:.3f} near limits [{limits["min"]:.3f}, {limits["max"]:.3f}]'
+
+        return None
+
+    def check_velocities(self):
+        """Check if joint velocities are within safe limits."""
+        for i, velocity in enumerate(self.joint_states.velocity):
+            if abs(velocity) > self.velocity_threshold:
+                joint_name = self.joint_states.name[i] if i < len(self.joint_states.name) else f'joint_{i}'
+                return f'Velocity limit exceeded: {joint_name}={velocity:.3f} > {self.velocity_threshold}'
+
+        return None
+
+    def trigger_safety_procedure(self, issues):
+        """Trigger safety procedures when issues are detected."""
+        issue_msg = '; '.join(issues)
+        self.get_logger().error(f'Safety issues detected: {issue_msg}')
+
+        # Engage emergency stop
+        self.safety_engaged = True
+
+        # Publish emergency stop command
+        stop_msg = Bool()
+        stop_msg.data = True
+        self.emergency_stop_pub.publish(stop_msg)
+
+        # Publish safety status
+        status_msg = String()
+        status_msg.data = f'SAFETY_TRIGGERED: {issue_msg}'
+        self.safety_status_pub.publish(status_msg)
+
+        # Log the safety event
+        self.get_logger().info('Safety procedures engaged - robot stopped')
+
+    def reset_safety(self):
+        """Reset safety system after issues are resolved."""
+        self.safety_engaged = False
+        self.get_logger().info('Safety system reset')
+```
+
+## Integration Best Practices
+
+### Isaac Pipeline Best Practices
+
+1. **Modular Design**: Keep components loosely coupled for easy maintenance
+2. **GPU Utilization**: Maximize GPU usage with batched operations
+3. **Memory Management**: Use CUDA memory pools for efficient allocation
+4. **Real-time Performance**: Ensure all components meet timing requirements
+5. **Safety First**: Implement comprehensive safety checks and emergency procedures
+6. **Monitoring**: Continuously monitor performance and system health
+7. **Scalability**: Design systems that can scale with increasing complexity
+
+### Performance Optimization Tips
+
+1. **TensorRT Optimization**: Use TensorRT for all neural network inference
+2. **Batch Processing**: Process multiple inputs simultaneously when possible
+3. **Asynchronous Execution**: Use asynchronous operations to hide latency
+4. **Memory Coalescing**: Ensure memory accesses are coalesced for GPU efficiency
+5. **Precision Selection**: Use FP16 instead of FP32 when accuracy allows
+6. **Kernel Fusion**: Fuse multiple operations into single kernels when possible
+
+The Isaac AI pipeline integration provides a robust foundation for developing advanced humanoid robotics applications with optimal performance and safety.

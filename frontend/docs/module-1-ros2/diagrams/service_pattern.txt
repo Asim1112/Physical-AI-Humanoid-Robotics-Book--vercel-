@@ -1,0 +1,189 @@
+# Service Communication Pattern (Request-Response)
+
+## Basic Service Server-Client Pattern
+
+```
+┌─────────────────┐                    ┌─────────────────┐
+│   Service       │                    │   Service       │
+│   Client        │                    │   Server        │
+│   Node          │                    │   Node          │
+│                 │                    │                 │
+│  ┌───────────┐  │    sends request   │  ┌───────────┐  │
+│  │ Request   │  │   ┌─────────────┐  │  │ Wait for  │  │
+│  │ to enable │  │───│ Service:    │──┼──│ requests  │  │
+│  │ robot     │  │   │ /enable_    │  │  │ for       │  │
+│  │ motors   │  │   │ motors      │  │  │ /enable_   │  │
+│  └───────────┘  │   └─────────────┘  │  │ motors    │  │
+│                 │                    │  └───────────┘  │
+│  ┌───────────┐  │    receives        │  ┌───────────┐  │
+│  │ Wait for  │  │   ┌─────────────┐  │  │ Process   │  │
+│  │ Response  │  │<──│ Response:   │<─┼──│ Request   │  │
+│  │ Success/  │  │   │ SetBool     │  │  │ and send  │  │
+│  │ Failure   │  │   │ (success,   │  │  │ response  │  │
+│  └───────────┘  │   │ message)    │  │  └───────────┘  │
+└─────────────────┘   └─────────────┘  └─────────────────┘
+```
+
+## Synchronous Communication Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                Service Request-Response Flow                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Time:  t0        t1           t2           t3         t4      │
+│                                                                 │
+│  Client:                                                         │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  Send Request      Wait for      Receive      Process      ││
+│  │  to Server         Response      Response     Result       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│        │                 │             │            │           │
+│        ▼                 ▼             ▼            ▼           │
+│  ┌─────────┐       ┌─────────┐   ┌─────────┐  ┌─────────┐     │
+│  │Request  │──────▶│Wait &   │──▶│Receive  │─▶│Process  │     │
+│  │Created  │       │Block    │   │Response │  │Result   │     │
+│  └─────────┘       └─────────┘   └─────────┘  └─────────┘     │
+│                                                                 │
+│  Server:                                                         │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  Receive      Process      Create      Send              ││
+│  │  Request       Request      Response    Response          ││
+│  └─────────────────────────────────────────────────────────────┘│
+│        ▲             │            │            │                │
+│        │             ▼            ▼            │                │
+│  ┌─────────┐   ┌─────────┐  ┌─────────┐      │                │
+│  │Receive  │──▶│Process  │─▶│Create   │──────┘                │
+│  │Request  │   │Request  │  │Response │                       │
+│  └─────────┘   └─────────┘  └─────────┘                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Multiple Service Clients to Single Server
+
+```
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   Service       │  │   Service       │  │   Service       │
+│   Client        │  │   Client        │  │   Client        │
+│   1: Motor      │  │   2: Navigation │  │   3: Perception │
+│   Control       │  │   Control       │  │   Control       │
+│                 │  │                 │  │                 │
+│  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌───────────┐  │
+│  │ Send      │  │  │  │ Send      │  │  │  │ Send      │  │
+│  │ /enable_  │  │  │  │ /set_goal │  │  │  │ /calibrate│  │
+│  │ motors   │  │  │  │ to server │  │  │  │ sensors   │  │
+│  │ request   │  │  │  │ request   │  │  │  │ request   │  │
+│  └───────────┘  │  │  └───────────┘  │  │  └───────────┘  │
+│                 │  │                 │  │                 │
+│                 │  │                 │  │                 │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+         │                      │                      │
+         └──────────────────────┼──────────────────────┘
+                                │
+                    ┌─────────────────────────────────┐
+                    │         ROS 2 Middleware        │
+                    │    Manages Multiple Services    │
+                    │    (/enable_motors, /set_goal,  │
+                    │     /calibrate_sensors)        │
+                    └─────────────────────────────────┘
+                                │
+                                │
+                    ┌─────────────────────────────────┐
+                    │        Service Server           │
+                    │   Handles Multiple Request      │
+                    │    Types Sequentially           │
+                    └─────────────────────────────────┘
+                               │  │  │
+┌─────────────────┐  ┌─────────▼──▼──▼─────────┐  ┌─────────────────┐
+│   Service       │  │      Process &          │  │   Service       │
+│   Client        │  │    Send Responses       │  │   Client        │
+│   1: Motor      │  │                         │  │   1: Motor      │
+│   Control       │  │  ┌─────────────────┐    │  │   Control       │
+│                 │  │  │Response for     │    │  │                 │
+│  ┌───────────┐  │  │  │/enable_motors  │◀───┼──│  ┌───────────┐  │
+│  │ Receive   │◀─┼──┼──│service         │    │  │  │ Receive   │  │
+│  │ Response  │  │  │  └─────────────────┘    │  │  │ Response  │  │
+│  │ for       │  │  │  ┌─────────────────┐    │  │  │ for       │  │
+│  │ motor     │  │  │  │Response for     │    │  │  │ motor     │  │
+│  │ enable    │  │  │  │/set_goal       │◀───┼──│  │ enable    │  │
+│  └───────────┘  │  │  │service         │    │  │  └───────────┘  │
+│                 │  │  └─────────────────┘    │  │                 │
+│                 │  │  ┌─────────────────┐    │  │                 │
+│                 │  │  │Response for     │    │  │                 │
+│                 │  │  │/calibrate_     │◀───┼──│                 │
+│                 │  │  │sensors service │    │  │                 │
+│                 │  │  └─────────────────┘    │  │                 │
+└─────────────────┘  └─────────────────────────┘  └─────────────────┘
+```
+
+## Humanoid Robot Example: Service Communication
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│           Humanoid Robot Service Communication                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  High-Level Command Nodes:                                      │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │ Behavior        │  │ Diagnostic      │  │ Calibration     │ │
+│  │ Manager         │  │ Node            │  │ Node            │ │
+│  │                 │  │                 │  │                 │ │
+│  │ ┌─────────────┐ │  │ ┌─────────────┐ │  │ ┌─────────────┐ │ │
+│  │ │Request:     │ │  │ │Request:     │ │  │ │Request:     │ │ │
+│  │ │/enable_     │ │  │ │/get_robot_  │ │  │ │/calibrate_  │ │ │
+│  │ │motors       │ │  │ │state        │ │  │ │encoders     │ │ │
+│  │ │(true/false) │ │  │ │()           │ │  │ │()           │ │ │
+│  │ └─────────────┘ │  │ └─────────────┘ │  │ └─────────────┘ │ │
+│  │ ┌─────────────┐ │  │ ┌─────────────┐ │  │ ┌─────────────┐ │ │
+│  │ │Wait for     │ │  │ │Wait for     │ │  │ │Wait for     │ │ │
+│  │ │response     │ │  │ │response     │ │  │ │response     │ │ │
+│  │ │(success/    │ │  │ │(robot state)│ │  │ │(success/    │ │ │
+│  │ │failure)     │ │  │ │             │ │  │ │failure)     │ │ │
+│  │ └─────────────┘ │  │ └─────────────┘ │  │ └─────────────┘ │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│                    │              │              │             │
+│                    └──────────────┼──────────────┘             │
+│                                   │                            │
+│                    ┌─────────────────────────────────────────┐ │
+│                    │         ROS 2 Middleware              │ │
+│                    │    Manages Services:                  │ │
+│                    │    - /enable_motors                   │ │
+│                    │    - /get_robot_state                 │ │
+│                    │    - /calibrate_encoders              │ │
+│                    └─────────────────────────────────────────┘ │
+│                                   │                            │
+│                    ┌─────────────────────────────────────────┐ │
+│                    │         Service Server Node           │ │
+│                    │        (Robot Control Server)         │ │
+│                    │                                       │ │
+│                    │  ┌─────────────────────────────────┐  │ │
+│                    │  │ Handle: /enable_motors        │  │ │
+│                    │  │ - Validate request parameters │  │ │
+│                    │  │ - Execute motor enable/disable│  │ │
+│                    │  │ - Return success/failure    │  │ │
+│                    │  └─────────────────────────────────┘  │ │
+│                    │  ┌─────────────────────────────────┐  │ │
+│                    │  │ Handle: /get_robot_state      │  │ │
+│                    │  │ - Gather current robot state│  │ │
+│                    │  │ - Return state information  │  │ │
+│                    │  └─────────────────────────────────┘  │ │
+│                    │  ┌─────────────────────────────────┐  │ │
+│                    │  │ Handle: /calibrate_encoders   │  │ │
+│                    │  │ - Execute calibration       │  │ │
+│                    │  │ - Return calibration result │  │ │
+│                    │  └─────────────────────────────────┘  │ │
+│                    └─────────────────────────────────────────┘ │
+│                                                                 │
+│  Response Flow:                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │ Behavior        │◀─│ Diagnostic      │◀─│ Calibration     │ │
+│  │ Manager         │  │ Node            │  │ Node            │ │
+│  │                 │  │                 │  │                 │ │
+│  │ Receive:        │  │ Receive:        │  │ Receive:        │ │
+│  │ - success/fail  │  │ - robot state   │  │ - success/fail  │ │
+│  │ - status msg    │  │ - health info   │  │ - calib result  │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```

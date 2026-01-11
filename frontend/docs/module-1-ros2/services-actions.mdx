@@ -1,0 +1,673 @@
+---
+title: "Services and Actions"
+description: "Learn about ROS 2 services for request-response communication and actions for long-running tasks with feedback"
+tags: [ros2, services, actions, communication, request-response, feedback]
+sidebar_label: "Services and Actions"
+sidebar_position: 4
+keywords: [ros2, services, actions, request-response, feedback, goals]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# Services and Actions
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+In this chapter, we'll explore two advanced communication patterns in ROS 2: services and actions. While topics are perfect for continuous data streams, services and actions provide different communication models for specific use cases in humanoid robotics.
+
+Services implement a request-response pattern, ideal for quick queries and commands that require a direct response. Actions are designed for long-running tasks that need to provide feedback during execution and support cancellation, making them perfect for complex humanoid robot behaviors like walking, manipulation, or navigation.
+
+### Learning Objectives
+
+- Understand the service request-response communication pattern
+- Create and use custom service definitions
+- Implement action servers and clients for long-running tasks
+- Design appropriate use cases for services vs actions vs topics
+- Handle service and action errors gracefully
+- Apply services and actions to humanoid robot control scenarios
+
+### Prerequisites
+
+- Understanding of ROS 2 nodes and topics
+- Basic Python programming knowledge
+- Completed the previous chapters on ROS 2 fundamentals
+
+## Deep Explanation
+
+### Services in ROS 2
+
+Services in ROS 2 implement a synchronous request-response pattern. A service client sends a request to a service server, which processes the request and returns a response. This is perfect for operations that:
+
+- Need a guaranteed response
+- Are relatively quick to execute
+- Require specific parameters and return specific results
+- Should block until completion
+
+For humanoid robotics, common service use cases include:
+- Requesting current robot state information
+- Enabling/disabling specific robot functions
+- Loading/unloading maps or configurations
+- Querying robot capabilities or parameters
+
+### Service Architecture
+
+A ROS 2 service consists of:
+- **Service Definition (.srv file)**: Defines the request and response message types
+- **Service Server**: Implements the service logic and responds to requests
+- **Service Client**: Sends requests to the server and receives responses
+
+The service definition file has two parts separated by three dashes (---):
+- Request: Input parameters for the service
+- Response: Output parameters from the service
+
+### Actions in ROS 2
+
+Actions are designed for long-running tasks that require:
+- Feedback during execution
+- Ability to cancel the task
+- Goal and result messages
+- More complex state management than services provide
+
+For humanoid robots, actions are ideal for:
+- Walking to a specific location with progress feedback
+- Manipulating objects with detailed status updates
+- Performing complex behaviors with intermediate results
+- Calibrating sensors or systems with progress reporting
+
+### Action Architecture
+
+An action definition includes three message types:
+- **Goal**: Parameters for the action request
+- **Result**: Final outcome of the action
+- **Feedback**: Intermediate status updates during execution
+
+The action client-server interaction includes:
+- Goal request and acceptance/rejection
+- Continuous feedback during execution
+- Result delivery upon completion
+- Cancellation capability
+
+### When to Use Each Pattern
+
+- **Topics**: For continuous data streams, sensor data, state broadcasting
+- **Services**: For quick, synchronous operations that return a result
+- **Actions**: For long-running tasks that need feedback and cancellation
+
+## Practical Examples
+
+### Example 1: Basic Service Server and Client
+
+<Tabs>
+<TabItem value="service_def" label="Service Definition (.srv)" default>
+
+```python
+# File: srv/SetJointPosition.srv
+# Request
+string joint_name
+float64 position
+---
+# Response
+bool success
+string message
+```
+
+</TabItem>
+<TabItem value="server" label="Service Server">
+
+```python
+#!/usr/bin/env python3
+# Example: Service server for setting joint positions on a humanoid robot
+
+import rclpy
+from rclpy.node import Node
+from example_interfaces.srv import SetBool
+from std_srvs.srv import SetBool as StdSetBool
+import time
+
+
+class JointPositionService(Node):
+    """
+    A service server that handles requests to set joint positions.
+    Demonstrates basic service server implementation.
+    """
+
+    def __init__(self):
+        super().__init__('joint_position_service')
+
+        # Create a service server
+        self.srv = self.create_service(
+            StdSetBool,  # Using standard SetBool service for simplicity
+            'set_joint_torque_enabled',
+            self.set_joint_torque_callback
+        )
+
+        # Simulate current joint states
+        self.torque_enabled = True
+
+        self.get_logger().info('Joint Position Service server initialized')
+
+    def set_joint_torque_callback(self, request, response):
+        """Handle incoming service requests to enable/disable joint torque."""
+        self.get_logger().info(f'Received request to set torque enabled: {request.data}')
+
+        # Simulate the actual hardware operation
+        try:
+            # In a real robot, this would send commands to the joint controllers
+            self.torque_enabled = request.data
+
+            # Simulate processing time
+            time.sleep(0.1)
+
+            # Set response
+            response.success = True
+            response.message = f'Joint torque successfully set to {request.data}'
+
+            self.get_logger().info(f'Service completed successfully: {response.message}')
+
+        except Exception as e:
+            response.success = False
+            response.message = f'Failed to set joint torque: {str(e)}'
+            self.get_logger().error(f'Service failed: {str(e)}')
+
+        return response
+
+
+def main(args=None):
+    """Main function to run the service server."""
+    rclpy.init(args=args)
+
+    service_node = JointPositionService()
+
+    try:
+        rclpy.spin(service_node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        service_node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="client" label="Service Client">
+
+```python
+#!/usr/bin/env python3
+# Example: Service client that calls the joint position service
+
+import rclpy
+from rclpy.node import Node
+from std_srvs.srv import SetBool
+import sys
+
+
+class JointPositionClient(Node):
+    """
+    A service client that calls the joint position service.
+    Demonstrates basic service client implementation.
+    """
+
+    def __init__(self):
+        super().__init__('joint_position_client')
+
+        # Create a service client
+        self.cli = self.create_client(SetBool, 'set_joint_torque_enabled')
+
+        # Wait for the service to be available
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service not available, waiting again...')
+
+        self.get_logger().info('Service client initialized')
+
+    def send_request(self, enable_torque):
+        """Send a request to the service."""
+        request = SetBool.Request()
+        request.data = enable_torque
+
+        self.get_logger().info(f'Sending request to set torque enabled: {enable_torque}')
+
+        # Call the service asynchronously
+        future = self.cli.call_async(request)
+        rclpy.spin_until_future_complete(self, future)
+
+        if future.result() is not None:
+            response = future.result()
+            self.get_logger().info(
+                f'Service response - Success: {response.success}, Message: {response.message}'
+            )
+            return response
+        else:
+            self.get_logger().error('Service call failed')
+            return None
+
+
+def main(args=None):
+    """Main function to run the service client."""
+    rclpy.init(args=args)
+
+    client = JointPositionClient()
+
+    # Get command line argument for torque enable/disable
+    if len(sys.argv) < 2:
+        print("Usage: python3 service_client.py <true|false>")
+        return
+
+    enable_torque = sys.argv[1].lower() == 'true'
+
+    response = client.send_request(enable_torque)
+
+    if response and response.success:
+        print(f"Successfully set torque to {enable_torque}")
+    else:
+        print(f"Failed to set torque to {enable_torque}")
+
+    client.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="explanation" label="Explanation">
+
+**Service Server Explanation:**
+- Creates a service server using `create_service()` method
+- Implements a callback function that processes requests and returns responses
+- Handles errors gracefully and provides meaningful response messages
+- Uses standard SetBool service for simplicity in this example
+
+**Service Client Explanation:**
+- Creates a service client using `create_client()` method
+- Waits for the service to be available before sending requests
+- Calls the service asynchronously using `call_async()`
+- Waits for the response using `spin_until_future_complete()`
+
+**Expected:**
+- Service server runs and waits for requests
+- Client connects to the service and sends requests
+- Server processes requests and sends responses back to client
+
+</TabItem>
+</Tabs>
+
+### Example 2: Action Server and Client for Humanoid Walking
+
+<Tabs>
+<TabItem value="action_def" label="Action Definition (.action)" default>
+
+```python
+# File: action/WalkToPose.action
+# Goal
+geometry_msgs/Pose target_pose
+float64 step_size
+int32 max_steps
+---
+# Result
+bool success
+string message
+int32 steps_taken
+geometry_msgs/Pose final_pose
+---
+# Feedback
+float32 progress_percentage
+geometry_msgs/Pose current_pose
+string status
+int32 steps_completed
+```
+
+</TabItem>
+<TabItem value="action_server" label="Action Server">
+
+```python
+#!/usr/bin/env python3
+# Example: Action server for humanoid robot walking to a pose
+
+import rclpy
+from rclpy.action import ActionServer, GoalResponse, CancelResponse
+from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+import time
+import math
+from geometry_msgs.msg import Pose, Point, Quaternion
+from builtin_interfaces.msg import Duration
+
+
+class WalkToPoseActionServer(Node):
+    """
+    An action server that handles walking to a target pose for a humanoid robot.
+    Demonstrates action server implementation with feedback and cancellation.
+    """
+
+    def __init__(self):
+        super().__init__('walk_to_pose_action_server')
+
+        # Use a reentrant callback group to handle multiple callbacks
+        callback_group = ReentrantCallbackGroup()
+
+        # Create the action server
+        self._action_server = ActionServer(
+            self,
+            WalkToPose,  # This would be imported from your action definition
+            'walk_to_pose',
+            execute_callback=self.execute_callback,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback,
+            callback_group=callback_group
+        )
+
+        # Current robot pose (simulated)
+        self.current_pose = Pose()
+        self.current_pose.position.x = 0.0
+        self.current_pose.position.y = 0.0
+        self.current_pose.position.z = 0.0
+        self.current_pose.orientation.w = 1.0
+
+        self.get_logger().info('Walk To Pose Action Server initialized')
+
+    def goal_callback(self, goal_request):
+        """Accept or reject goal requests."""
+        # Check if the goal is reasonable (e.g., not too far away)
+        distance = math.sqrt(
+            (goal_request.target_pose.position.x - self.current_pose.position.x)**2 +
+            (goal_request.target_pose.position.y - self.current_pose.position.y)**2
+        )
+
+        if distance > 10.0:  # Max distance of 10 meters
+            self.get_logger().warn(f'Rejecting goal: too far away ({distance:.2f}m)')
+            return GoalResponse.REJECT
+
+        self.get_logger().info(f'Accepting goal to walk to ({goal_request.target_pose.position.x:.2f}, {goal_request.target_pose.position.y:.2f})')
+        return GoalResponse.ACCEPT
+
+    def cancel_callback(self, goal_handle):
+        """Accept or reject cancel requests."""
+        self.get_logger().info('Received cancel request for walk action')
+        return CancelResponse.ACCEPT
+
+    async def execute_callback(self, goal_handle):
+        """Execute the walk action."""
+        self.get_logger().info('Executing walk to pose action...')
+
+        # Get goal parameters
+        target_pose = goal_handle.request.target_pose
+        step_size = goal_handle.request.step_size
+        max_steps = goal_handle.request.max_steps
+
+        # Calculate distance to target
+        distance = math.sqrt(
+            (target_pose.position.x - self.current_pose.position.x)**2 +
+            (target_pose.position.y - self.current_pose.position.y)**2
+        )
+
+        # Calculate number of steps needed
+        steps_needed = int(distance / step_size) + 1
+        total_steps = min(steps_needed, max_steps)
+
+        # Simulate walking progress
+        for step in range(total_steps):
+            # Check if the goal was cancelled
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                result = WalkToPose.Result()
+                result.success = False
+                result.message = 'Goal was canceled'
+                result.steps_taken = step
+                result.final_pose = self.current_pose
+                return result
+
+            # Simulate taking a step
+            progress = float(step) / float(total_steps)
+            self.current_pose.position.x += (target_pose.position.x - self.current_pose.position.x) * (1.0 / total_steps)
+            self.current_pose.position.y += (target_pose.position.y - self.current_pose.position.y) * (1.0 / total_steps)
+
+            # Update feedback
+            feedback_msg = WalkToPose.Feedback()
+            feedback_msg.progress_percentage = progress * 100.0
+            feedback_msg.current_pose = self.current_pose
+            feedback_msg.status = f'Walking... Step {step+1}/{total_steps}'
+            feedback_msg.steps_completed = step + 1
+
+            goal_handle.publish_feedback(feedback_msg)
+            self.get_logger().info(f'Feedback: {feedback_msg.status} ({feedback_msg.progress_percentage:.1f}%)')
+
+            # Simulate time for each step
+            time.sleep(0.5)
+
+        # Check if we reached the target
+        distance_to_target = math.sqrt(
+            (target_pose.position.x - self.current_pose.position.x)**2 +
+            (target_pose.position.y - self.current_pose.position.y)**2
+        )
+
+        # Create result
+        result = WalkToPose.Result()
+        if distance_to_target <= step_size:  # Consider successful if within step size
+            result.success = True
+            result.message = f'Successfully walked to target in {total_steps} steps'
+            result.steps_taken = total_steps
+            result.final_pose = self.current_pose
+            goal_handle.succeed()
+        else:
+            result.success = False
+            result.message = f'Failed to reach target after {total_steps} steps'
+            result.steps_taken = total_steps
+            result.final_pose = self.current_pose
+            goal_handle.abort()
+
+        self.get_logger().info(f'Action completed: {result.message}')
+        return result
+
+
+def main(args=None):
+    """Main function to run the action server."""
+    rclpy.init(args=args)
+
+    node = WalkToPoseActionServer()
+
+    # Use a multi-threaded executor to handle callbacks
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="action_client" label="Action Client">
+
+```python
+#!/usr/bin/env python3
+# Example: Action client for humanoid robot walking to a pose
+
+import rclpy
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from geometry_msgs.msg import Pose, Point, Quaternion
+import time
+
+
+class WalkToPoseActionClient(Node):
+    """
+    An action client that sends walk commands to the humanoid robot.
+    Demonstrates action client implementation with feedback handling.
+    """
+
+    def __init__(self):
+        super().__init__('walk_to_pose_action_client')
+
+        # Create the action client
+        self._action_client = ActionClient(self, WalkToPose, 'walk_to_pose')
+
+    def send_goal(self, x, y, step_size=0.1, max_steps=100):
+        """Send a goal to the action server."""
+        # Wait for the action server to be available
+        self.get_logger().info('Waiting for action server...')
+        self._action_client.wait_for_server()
+
+        # Create the goal message
+        goal_msg = WalkToPose.Goal()
+        goal_msg.target_pose = Pose()
+        goal_msg.target_pose.position.x = x
+        goal_msg.target_pose.position.y = y
+        goal_msg.target_pose.position.z = 0.0
+        goal_msg.target_pose.orientation.w = 1.0
+        goal_msg.step_size = step_size
+        goal_msg.max_steps = max_steps
+
+        # Send the goal
+        self.get_logger().info(f'Sending goal to walk to ({x}, {y})')
+        send_goal_future = self._action_client.send_goal_async(
+            goal_msg,
+            feedback_callback=self.feedback_callback
+        )
+
+        # Wait for the response
+        rclpy.spin_until_future_complete(self, send_goal_future)
+        goal_handle = send_goal_future.result()
+
+        if not goal_handle.accepted:
+            self.get_logger().error('Goal was rejected by the server')
+            return None
+
+        self.get_logger().info('Goal accepted by server, waiting for result...')
+        get_result_future = goal_handle.get_result_async()
+
+        # Wait for the result
+        rclpy.spin_until_future_complete(self, get_result_future)
+        result = get_result_future.result().result
+
+        self.get_logger().info(f'Action completed: {result.message}')
+        return result
+
+    def feedback_callback(self, feedback_msg):
+        """Handle feedback from the action server."""
+        feedback = feedback_msg.feedback
+        self.get_logger().info(
+            f'Feedback: {feedback.status} - Progress: {feedback.progress_percentage:.1f}%'
+        )
+
+
+def main(args=None):
+    """Main function to run the action client."""
+    rclpy.init(args=args)
+
+    action_client = WalkToPoseActionClient()
+
+    # Send a goal to walk to position (2.0, 1.0)
+    result = action_client.send_goal(2.0, 1.0, step_size=0.2, max_steps=50)
+
+    if result and result.success:
+        print(f"Successfully walked to target! Final pose: ({result.final_pose.position.x:.2f}, {result.final_pose.position.y:.2f})")
+    else:
+        print("Failed to walk to target")
+
+    action_client.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+</Tabs>
+
+## Exercises and Checkpoints
+
+### Exercise 1: Service vs Action Decision Matrix
+
+**Scenario:** You're designing a humanoid robot control system with these operations:
+1. Query current battery level
+2. Move robot to a specific location
+3. Calibrate joint encoders
+4. Request robot to play a sound
+5. Perform a complex manipulation task
+6. Get current joint positions
+
+**Task:** For each operation, decide whether to use a topic, service, or action, and justify your choice.
+
+**Success Criteria:**
+- [ ] Correctly identify which pattern to use for each operation
+- [ ] Provide clear justification based on communication requirements
+- [ ] Consider timing, feedback, and cancellation needs
+
+### Exercise 2: Practical Implementation
+
+**Objective:** Create a service that allows external systems to request the humanoid robot to perform a simple behavior (e.g., wave arms).
+
+**Steps:**
+1. Define a custom service type for the waving behavior
+2. Implement a service server that simulates the waving motion
+3. Create a service client that calls the service
+4. Add error handling for invalid requests
+5. Test the service with different parameters
+
+**Expected Outcome:** Working service with proper error handling and validation.
+
+### Self-Assessment Questions
+
+1. **Question:** What is the main difference between a service and an action in ROS 2?
+   **Answer:** Services provide simple request-response communication for quick operations, while actions are designed for long-running tasks that need feedback during execution and the ability to cancel.
+
+2. **Question:** When should you use an action instead of a service?
+   **Answer:** Use actions for tasks that take significant time to complete, need to provide progress feedback, or should be cancellable. Use services for quick operations that return a result immediately.
+
+3. **Question:** What are the three message types in an action definition?
+   **Answer:** Goal (input parameters), Result (final output), and Feedback (intermediate status updates).
+
+## Summary and Key Takeaways
+
+### Key Concepts Recap
+
+- **Services**: Synchronous request-response communication for quick operations
+- **Actions**: Asynchronous communication for long-running tasks with feedback and cancellation
+- **Service Definitions**: .srv files that define request and response message types
+- **Action Definitions**: .action files that define goal, result, and feedback message types
+- **Client-Server Pattern**: Clear separation between requesters and implementers
+
+### Practical Applications
+
+- **Services**: Querying robot state, enabling/disabling functions, loading configurations
+- **Actions**: Navigation, manipulation, calibration, complex behaviors with progress tracking
+- **Error Handling**: Proper response messages and exception handling for robust systems
+- **Asynchronous Operations**: Non-blocking communication for responsive robot systems
+
+### Next Steps
+
+- **Module Progression:** Next chapter covers [URDF Modeling](./urdf-modeling.mdx) for robot description
+- **Further Reading:** Explore advanced action features like preemption and multiple goals
+- **Practice Opportunities:** Implement services and actions for different robot subsystems
+
+### Common Mistakes and Troubleshooting
+
+- **Mistake 1:** Using services for long-running operations → **Solution:** Use actions for tasks that take significant time
+- **Mistake 2:** Not handling cancellation in action servers → **Solution:** Always check for cancellation requests in action execution loops
+- **Mistake 3:** Blocking service callbacks → **Solution:** Keep service callbacks fast and handle heavy processing asynchronously
+
+### References and Resources
+
+- [ROS 2 Services Tutorial](https://docs.ros.org/en/humble/Tutorials/Services/Understanding-ROS2-Services.html)
+- [ROS 2 Actions Guide](https://docs.ros.org/en/humble/Tutorials/Actions/Understanding-ROS2-Actions.html)
+- [Action Definition Files](https://docs.ros.org/en/humble/Concepts/About-ROS-Interfaces.html#action-definition-files)
+- [rclpy Action Documentation](https://docs.ros2.org/latest/api/rclpy/api/actions.html)

@@ -1,0 +1,672 @@
+---
+title: "System Integration"
+description: "Learn how to integrate all ROS 2 concepts into a complete humanoid robot system"
+tags: [ros2, system integration, architecture, complete system, humanoid]
+sidebar_label: "System Integration"
+sidebar_position: 6
+keywords: [ros2, system integration, architecture, complete robot system]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# System Integration
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+In this final chapter of Module 1, we'll bring together all the concepts learned in previous chapters to create a complete humanoid robot system. System integration is the process of combining individual components into a cohesive, functional whole that meets the overall robot objectives.
+
+This chapter demonstrates how nodes, topics, services, actions, and URDF models work together in a real humanoid robot application. We'll explore architectural patterns, system design considerations, and best practices for building robust robotic systems that can handle the complexity of humanoid robotics.
+
+### Learning Objectives
+
+- Understand architectural patterns for complete robotic systems
+- Design and implement a complete humanoid robot control system
+- Integrate communication patterns (topics, services, actions) effectively
+- Combine URDF models with control systems
+- Apply system-level debugging and testing techniques
+- Plan for scalability and maintainability in robotic systems
+
+### Prerequisites
+
+- Complete understanding of all previous Module 1 chapters
+- Experience with ROS 2 nodes, topics, services, and actions
+- Knowledge of URDF modeling
+
+## Deep Explanation
+
+### System Architecture Patterns
+
+When designing complete robotic systems, several architectural patterns emerge that help manage complexity:
+
+1. **Layered Architecture**: Organizes functionality into layers (hardware abstraction, control, planning, behavior)
+2. **Component-Based Architecture**: Treats robot functionality as independent, reusable components
+3. **Service-Oriented Architecture**: Uses services to provide specific capabilities to other system parts
+4. **Event-Driven Architecture**: Uses topics and actions to respond to system events
+
+For humanoid robots, a hybrid approach often works best, combining these patterns based on specific needs.
+
+### Integration Challenges
+
+Humanoid robot systems face unique integration challenges:
+
+- **Complex Kinematics**: Multiple interconnected limbs requiring coordinated control
+- **Real-time Requirements**: Balance and locomotion need high-frequency control loops
+- **Sensor Fusion**: Combining data from many sensors (IMU, cameras, joint encoders, etc.)
+- **Safety Critical Operations**: Systems must fail safely to prevent damage
+- **Computational Demands**: Processing power needed for perception, planning, and control
+
+### System Design Considerations
+
+When integrating a complete humanoid system, consider:
+
+- **Modularity**: Keep components independent for easier testing and maintenance
+- **Scalability**: Design systems that can accommodate additional sensors or capabilities
+- **Fault Tolerance**: Implement graceful degradation when components fail
+- **Performance**: Optimize communication patterns for real-time requirements
+- **Debugging**: Include tools and interfaces for system monitoring and debugging
+
+### Launch Files and System Management
+
+ROS 2 launch files are crucial for system integration, allowing you to:
+
+- Start multiple nodes simultaneously
+- Configure parameters for the entire system
+- Manage dependencies between nodes
+- Handle system startup and shutdown procedures
+
+Launch files enable reproducible system configurations and simplify deployment.
+
+## Practical Examples
+
+### Example 1: Complete Humanoid Robot System
+
+<Tabs>
+<TabItem value="launch" label="Launch File" default>
+
+```xml
+<?xml version="1.0"?>
+<launch>
+  <!-- Arguments for configuration -->
+  <arg name="robot_model" default="simple_humanoid"/>
+  <arg name="use_sim_time" default="false"/>
+
+  <!-- Robot state publisher to broadcast transforms -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher">
+    <param name="robot_description" value="$(find-pkg-share my_robot_description)/urdf/$(var robot_model).urdf"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <!-- Joint state publisher for GUI control during development -->
+  <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" name="joint_state_publisher_gui">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <!-- IMU sensor driver -->
+  <node pkg="my_robot_drivers" exec="imu_driver" name="imu_driver">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="frame_id" value="imu_link"/>
+  </node>
+
+  <!-- Joint controllers -->
+  <node pkg="controller_manager" exec="ros2_control_node" name="ros2_control_node">
+    <param name="robot_description" value="$(find-pkg-share my_robot_description)/urdf/$(var robot_model).urdf"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+  <!-- Balance controller -->
+  <node pkg="my_robot_controllers" exec="balance_controller" name="balance_controller">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="control_frequency" value="500"/>
+  </node>
+
+  <!-- High-level behavior manager -->
+  <node pkg="my_robot_behaviors" exec="behavior_manager" name="behavior_manager">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
+</launch>
+```
+
+</TabItem>
+<TabItem value="behavior_manager" label="Behavior Manager Node">
+
+```python
+#!/usr/bin/env python3
+# Example: Behavior manager that coordinates high-level robot behaviors
+
+import rclpy
+from rclpy.node import Node
+from rclpy.action import ActionClient
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from std_msgs.msg import String, Bool
+from sensor_msgs.msg import JointState, Imu
+from geometry_msgs.msg import Twist
+from my_robot_msgs.action import WalkToPose, ManipulateObject
+from my_robot_msgs.srv import SetRobotMode, QueryRobotState
+import time
+import threading
+
+
+class BehaviorManager(Node):
+    """
+    High-level behavior manager that coordinates different robot capabilities.
+    Demonstrates system integration by combining multiple ROS 2 patterns.
+    """
+
+    def __init__(self):
+        super().__init__('behavior_manager')
+
+        # State management
+        self.current_behavior = 'idle'
+        self.robot_mode = 'normal'  # normal, safe_mode, calibration
+        self.joint_states = None
+        self.imu_data = None
+
+        # Create callback groups for different functionality
+        sensor_group = MutuallyExclusiveCallbackGroup()
+        control_group = MutuallyExclusiveCallbackGroup()
+
+        # Subscribers for sensor data
+        self.joint_sub = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10,
+            callback_group=sensor_group
+        )
+
+        self.imu_sub = self.create_subscription(
+            Imu,
+            '/imu/data',
+            self.imu_callback,
+            10,
+            callback_group=sensor_group
+        )
+
+        # Publishers for commands
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+
+        # Service servers for mode control
+        self.set_mode_srv = self.create_service(
+            SetRobotMode,
+            'set_robot_mode',
+            self.set_robot_mode_callback
+        )
+
+        self.query_state_srv = self.create_service(
+            QueryRobotState,
+            'query_robot_state',
+            self.query_robot_state_callback
+        )
+
+        # Action clients for complex behaviors
+        self.walk_action_client = ActionClient(self, WalkToPose, 'walk_to_pose')
+        self.manipulate_action_client = ActionClient(self, ManipulateObject, 'manipulate_object')
+
+        # Timer for behavior updates
+        self.behavior_timer = self.create_timer(0.1, self.behavior_update_callback)
+
+        self.get_logger().info('Behavior Manager initialized')
+
+    def joint_state_callback(self, msg):
+        """Handle joint state updates."""
+        self.joint_states = msg
+        self.check_safety_conditions()
+
+    def imu_callback(self, msg):
+        """Handle IMU data updates."""
+        self.imu_data = msg
+        self.check_balance_conditions()
+
+    def set_robot_mode_callback(self, request, response):
+        """Handle robot mode changes."""
+        old_mode = self.robot_mode
+        self.robot_mode = request.mode
+
+        if self.robot_mode == 'safe_mode':
+            # Stop all movement in safe mode
+            self.emergency_stop()
+
+        response.success = True
+        response.message = f'Mode changed from {old_mode} to {self.robot_mode}'
+
+        self.get_logger().info(f'Robot mode changed: {response.message}')
+        return response
+
+    def query_robot_state_callback(self, request, response):
+        """Handle state query requests."""
+        response.current_behavior = self.current_behavior
+        response.robot_mode = self.robot_mode
+        response.joint_count = len(self.joint_states.name) if self.joint_states else 0
+
+        # Check if robot is balanced
+        if self.imu_data:
+            # Simple balance check based on IMU pitch
+            pitch = self.get_pitch_from_quaternion(self.imu_data.orientation)
+            response.is_balanced = abs(pitch) < 0.3  # Within 17 degrees
+        else:
+            response.is_balanced = False
+
+        return response
+
+    def behavior_update_callback(self):
+        """Main behavior update loop."""
+        if self.robot_mode == 'safe_mode':
+            return  # Don't execute behaviors in safe mode
+
+        # Example behavior logic
+        if self.current_behavior == 'idle':
+            # Check if we should transition to another behavior
+            if self.should_start_walking():
+                self.start_walking_behavior()
+        elif self.current_behavior == 'walking':
+            # Monitor walking progress
+            if self.is_walking_complete():
+                self.current_behavior = 'idle'
+
+    def check_safety_conditions(self):
+        """Check for safety-related conditions."""
+        if not self.joint_states:
+            return
+
+        # Check for extreme joint positions
+        for pos in self.joint_states.position:
+            if abs(pos) > 3.0:  # Extreme position check
+                self.get_logger().warn('Extreme joint position detected - entering safe mode')
+                self.emergency_stop()
+                return
+
+    def check_balance_conditions(self):
+        """Check for balance-related conditions."""
+        if not self.imu_data:
+            return
+
+        # Check if robot is tilting too much
+        pitch = self.get_pitch_from_quaternion(self.imu_data.orientation)
+        if abs(pitch) > 0.5:  # More than 28 degrees
+            self.get_logger().warn('Robot is tilting excessively - entering safe mode')
+            self.emergency_stop()
+
+    def get_pitch_from_quaternion(self, orientation):
+        """Extract pitch angle from quaternion."""
+        import math
+        # Convert quaternion to Euler angles (simplified pitch calculation)
+        sinr_cosp = 2 * (orientation.w * orientation.y - orientation.z * orientation.x)
+        cosr_cosp = 1 - 2 * (orientation.y * orientation.y + orientation.x * orientation.x)
+        return math.atan2(sinr_cosp, cosr_cosp)
+
+    def should_start_walking(self):
+        """Determine if walking behavior should start."""
+        # This could be based on various conditions like commands received,
+        # sensor data, or timed events
+        return False  # Placeholder logic
+
+    def start_walking_behavior(self):
+        """Initiate walking behavior."""
+        self.current_behavior = 'walking'
+        self.get_logger().info('Starting walking behavior')
+
+    def is_walking_complete(self):
+        """Check if walking behavior is complete."""
+        # This would check action feedback or other completion criteria
+        return True  # Placeholder logic
+
+    def emergency_stop(self):
+        """Execute emergency stop procedures."""
+        self.robot_mode = 'safe_mode'
+        self.current_behavior = 'emergency_stop'
+
+        # Stop all movement
+        stop_cmd = Twist()
+        self.cmd_vel_pub.publish(stop_cmd)
+
+        self.get_logger().error('EMERGENCY STOP ACTIVATED')
+
+    def send_walk_command(self, x, y):
+        """Send a walk command to the action server."""
+        if not self.walk_action_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().error('Walk action server not available')
+            return False
+
+        goal_msg = WalkToPose.Goal()
+        goal_msg.target_pose.position.x = x
+        goal_msg.target_pose.position.y = y
+        goal_msg.target_pose.orientation.w = 1.0
+        goal_msg.step_size = 0.1
+        goal_msg.max_steps = 100
+
+        future = self.walk_action_client.send_goal_async(goal_msg)
+        return future
+
+
+def main(args=None):
+    """Main function to run the behavior manager."""
+    rclpy.init(args=args)
+
+    node = BehaviorManager()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="explanation" label="Explanation">
+
+**System Integration Explanation:**
+- The launch file coordinates multiple nodes to start the complete system
+- The behavior manager acts as a central coordinator using various ROS 2 patterns
+- Service servers allow external systems to query and control robot state
+- Action clients enable complex, long-running behaviors
+- Safety checks are implemented throughout the system
+
+**Key Integration Elements:**
+- **Launch Files**: Coordinate system startup with proper parameter configuration
+- **State Management**: Track robot mode and behavior state across the system
+- **Safety Systems**: Monitor conditions and implement emergency procedures
+- **Communication**: Combine topics, services, and actions appropriately
+- **Modularity**: Each component has a specific responsibility
+
+**Expected:**
+- Complete system with coordinated behavior
+- Proper error handling and safety procedures
+- Scalable architecture that can accommodate additional capabilities
+
+</TabItem>
+</Tabs>
+
+### Example 2: Parameter Management and System Configuration
+
+<Tabs>
+<TabItem value="param_file" label="Parameter YAML File">
+
+```yaml
+# Configuration file for humanoid robot system
+/**:
+  ros__parameters:
+    use_sim_time: false
+    robot_name: "simple_humanoid"
+    control_frequency: 500
+    safety_limits:
+      max_joint_velocity: 5.0
+      max_joint_effort: 100.0
+      max_tilt_angle: 0.5
+    system_modes:
+      - "normal"
+      - "calibration"
+      - "safe_mode"
+      - "maintenance"
+
+robot_state_publisher:
+  ros__parameters:
+    publish_frequency: 50.0
+    ignore_timestamp: false
+
+joint_state_publisher:
+  ros__parameters:
+    rate: 50
+    source_list: ["joint_states_desired", "joint_states_actual"]
+
+balance_controller:
+  ros__parameters:
+    control_frequency: 500
+    pid_gains:
+      kp: 50.0
+      ki: 0.1
+      kd: 10.0
+    balance_threshold: 0.1
+    max_correction: 0.5
+
+behavior_manager:
+  ros__parameters:
+    default_behavior: "idle"
+    behavior_timeout: 30.0
+    safety_check_frequency: 10.0
+    emergency_stop_conditions:
+      - "excessive_tilt"
+      - "joint_limit_violation"
+      - "communication_timeout"
+```
+
+</TabItem>
+<TabItem value="param_node" label="Parameter-Driven Node">
+
+```python
+#!/usr/bin/env python3
+# Example: Parameter-driven system node with runtime configuration
+
+import rclpy
+from rclpy.node import Node
+from rclpy.parameter import Parameter
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray
+import json
+
+
+class ConfigurableSystemNode(Node):
+    """
+    A system node that uses parameters for configuration and supports dynamic reconfiguration.
+    Demonstrates parameter management in integrated systems.
+    """
+
+    def __init__(self):
+        super().__init__('configurable_system_node')
+
+        # Declare parameters with default values
+        self.declare_parameter('control_frequency', 100)
+        self.declare_parameter('safety_limits.max_joint_velocity', 5.0)
+        self.declare_parameter('safety_limits.max_joint_effort', 100.0)
+        self.declare_parameter('safety_limits.max_tilt_angle', 0.5)
+        self.declare_parameter('debug_mode', False)
+        self.declare_parameter('enabled_modules', ['perception', 'control', 'planning'])
+
+        # Get parameter values
+        self.control_frequency = self.get_parameter('control_frequency').value
+        self.max_joint_velocity = self.get_parameter('safety_limits.max_joint_velocity').value
+        self.max_joint_effort = self.get_parameter('safety_limits.max_joint_effort').value
+        self.max_tilt_angle = self.get_parameter('safety_limits.max_tilt_angle').value
+        self.debug_mode = self.get_parameter('debug_mode').value
+        self.enabled_modules = self.get_parameter('enabled_modules').value
+
+        # Create timer based on control frequency
+        timer_period = 1.0 / self.control_frequency
+        self.control_timer = self.create_timer(timer_period, self.control_loop)
+
+        # Create subscribers and publishers
+        self.joint_state_sub = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10
+        )
+
+        self.control_cmd_pub = self.create_publisher(
+            Float64MultiArray,
+            '/joint_group_position_controller/commands',
+            10
+        )
+
+        # Add parameter callback to handle dynamic reconfiguration
+        self.add_on_set_parameters_callback(self.parameter_callback)
+
+        self.get_logger().info(f'Configurable System Node initialized with {self.control_frequency}Hz control rate')
+
+    def parameter_callback(self, params):
+        """Handle parameter changes at runtime."""
+        successful = True
+        reason = ''
+
+        for param in params:
+            if param.name == 'control_frequency' and param.type_ == Parameter.Type.INTEGER:
+                self.control_frequency = param.value
+                # Adjust timer period
+                timer_period = 1.0 / self.control_frequency
+                self.control_timer.timer_period_ns = int(timer_period * 1e9)
+                self.get_logger().info(f'Control frequency updated to {self.control_frequency}Hz')
+            elif param.name == 'safety_limits.max_joint_velocity':
+                self.max_joint_velocity = param.value
+                self.get_logger().info(f'Max joint velocity updated to {self.max_joint_velocity}')
+            elif param.name == 'debug_mode':
+                self.debug_mode = param.value
+                self.get_logger().info(f'Debug mode set to {self.debug_mode}')
+
+        return SetParametersResult(successful=successful, reason=reason)
+
+    def control_loop(self):
+        """Main control loop that uses configured parameters."""
+        if self.debug_mode:
+            self.get_logger().debug(f'Control loop running at {self.control_frequency}Hz')
+
+        # Example control logic using parameters
+        if 'control' in self.enabled_modules:
+            self.execute_control_logic()
+
+    def joint_state_callback(self, msg):
+        """Handle joint state updates with parameter-based validation."""
+        for i, (name, pos, vel, eff) in enumerate(zip(msg.name, msg.position, msg.velocity, msg.effort)):
+            # Check safety limits using parameters
+            if abs(vel) > self.max_joint_velocity:
+                self.get_logger().warn(f'Joint {name} velocity limit exceeded: {vel} > {self.max_joint_velocity}')
+
+            if abs(eff) > self.max_joint_effort:
+                self.get_logger().warn(f'Joint {name} effort limit exceeded: {eff} > {self.max_joint_effort}')
+
+    def execute_control_logic(self):
+        """Execute control logic based on system parameters."""
+        # This would contain the actual control algorithm
+        # For example, a PD controller using parameter-defined gains
+        pass
+
+    def get_system_status(self):
+        """Get current system status based on parameters and state."""
+        status = {
+            'control_frequency': self.control_frequency,
+            'max_joint_velocity': self.max_joint_velocity,
+            'max_joint_effort': self.max_joint_effort,
+            'debug_mode': self.debug_mode,
+            'enabled_modules': self.enabled_modules,
+            'active': True
+        }
+        return status
+
+
+def main(args=None):
+    """Main function to run the configurable system node."""
+    rclpy.init(args=args)
+
+    node = ConfigurableSystemNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+</Tabs>
+
+## Exercises and Checkpoints
+
+### Exercise 1: System Architecture Design
+
+**Scenario:** You're tasked with designing the software architecture for a humanoid robot that needs to:
+- Walk to specified locations
+- Manipulate objects
+- Respond to voice commands
+- Navigate around obstacles
+- Maintain balance
+
+**Task:** Design a system architecture that integrates all these capabilities, considering:
+- Which components should be separate nodes
+- How they should communicate (topics, services, actions)
+- What parameters each component needs
+- How to handle system startup and shutdown
+- Safety considerations for each subsystem
+
+**Success Criteria:**
+- [ ] Clear separation of concerns with appropriate modularity
+- [ ] Proper communication patterns for each interaction
+- [ ] Comprehensive parameter management
+- [ ] Safety systems integrated throughout
+
+### Exercise 2: Practical Implementation
+
+**Objective:** Create a launch file and main system node that integrates multiple robot capabilities.
+
+**Steps:**
+1. Create a launch file that starts multiple coordinated nodes
+2. Implement a main system node that coordinates between subsystems
+3. Add parameter management for system configuration
+4. Include safety checks and emergency procedures
+5. Test the system integration with simulated components
+
+**Expected Outcome:** Working integrated system with coordinated behavior and safety management.
+
+### Self-Assessment Questions
+
+1. **Question:** What are the main benefits of using launch files in robotic systems?
+   **Answer:** Launch files allow coordinated startup of multiple nodes, centralized parameter configuration, dependency management, and reproducible system deployments.
+
+2. **Question:** How do you handle system-wide parameter changes during runtime?
+   **Answer:** Use ROS 2's parameter system with callback functions that can modify node behavior when parameters change, allowing dynamic reconfiguration without restarting nodes.
+
+3. **Question:** What is the role of a behavior manager in a humanoid robot system?
+   **Answer:** A behavior manager coordinates high-level robot behaviors, manages state transitions, ensures safety conditions are met, and provides a centralized interface for system control.
+
+## Summary and Key Takeaways
+
+### Key Concepts Recap
+
+- **System Integration**: Combining individual components into a cohesive robot system
+- **Architectural Patterns**: Layered, component-based, service-oriented, and event-driven approaches
+- **Launch Files**: Coordinating system startup and configuration
+- **Parameter Management**: Centralized configuration with runtime reconfiguration
+- **Safety Systems**: Integrated safety checks throughout the robot system
+
+### Practical Applications
+
+- **Coordinated Control**: Multiple subsystems working together toward common goals
+- **System Monitoring**: Comprehensive system state awareness and debugging
+- **Scalability**: Architecture that can accommodate new capabilities
+- **Robustness**: Error handling and graceful degradation when components fail
+
+### Next Steps
+
+- **Module Progression:** Complete Module 1 with [Exercises and Checkpoints](./exercises-checkpoints.mdx) (to be created)
+- **Further Reading:** Explore advanced system integration patterns and middleware considerations
+- **Practice Opportunities:** Build complete robot systems with multiple integrated capabilities
+
+### Common Mistakes and Troubleshooting
+
+- **Mistake 1:** Creating monolithic nodes instead of modular components → **Solution:** Break functionality into focused, single-responsibility nodes
+- **Mistake 2:** Not planning for system-wide safety → **Solution:** Integrate safety checks throughout the system architecture
+- **Mistake 3:** Poor parameter organization → **Solution:** Use hierarchical parameter structures and configuration files
+
+### References and Resources
+
+- [ROS 2 Launch System](https://docs.ros.org/en/humble/Tutorials/Launch-system.html)
+- [ROS 2 Parameters Guide](https://docs.ros.org/en/humble/Tutorials/Parameters/Understanding-ROS2-Parameters.html)
+- [ROS 2 System Architecture Patterns](https://docs.ros.org/en/humble/Releases/Release-Humble-Hawksbill.html)
+- [Robot Framework Design Guidelines](https://design.ros2.org/)

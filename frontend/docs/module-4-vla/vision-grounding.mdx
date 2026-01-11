@@ -1,0 +1,768 @@
+# Vision Grounding for Language Commands
+
+## Overview
+
+Vision grounding is the process of connecting language references to visual perception, enabling robots to identify objects, locations, and relationships mentioned in natural language commands. This chapter explores techniques for grounding linguistic concepts in visual scenes, from object detection to spatial reasoning and visual question answering.
+
+## Vision-Language Grounding Architecture
+
+### System Overview
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                  VISION-LANGUAGE GROUNDING                      │
+│                                                                 │
+│  ┌─────────────┐          ┌─────────────┐                     │
+│  │   VISUAL    │          │  LINGUISTIC │                     │
+│  │   INPUT     │          │   QUERY     │                     │
+│  └──────┬──────┘          └──────┬──────┘                     │
+│         │                        │                             │
+│         ▼                        ▼                             │
+│  ┌─────────────┐          ┌─────────────┐                     │
+│  │   VISION    │          │  LANGUAGE   │                     │
+│  │   ENCODER   │          │  ENCODER    │                     │
+│  └──────┬──────┘          └──────┬──────┘                     │
+│         │                        │                             │
+│         └───────────┬────────────┘                             │
+│                     ▼                                           │
+│            ┌────────────────┐                                  │
+│            │ CROSS-MODAL    │                                  │
+│            │ ATTENTION      │                                  │
+│            └────────┬───────┘                                  │
+│                     │                                           │
+│         ┌───────────┴───────────┐                              │
+│         ▼                       ▼                               │
+│  ┌─────────────┐         ┌─────────────┐                      │
+│  │   OBJECT    │         │  SPATIAL    │                      │
+│  │   GROUNDING │         │  GROUNDING  │                      │
+│  └──────┬──────┘         └──────┬──────┘                      │
+│         │                       │                               │
+│         └───────────┬───────────┘                              │
+│                     ▼                                           │
+│            ┌────────────────┐                                  │
+│            │  GROUNDED      │                                  │
+│            │  REFERENCES    │                                  │
+│            └────────────────┘                                  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+## Object Grounding
+
+### CLIP-Based Object Grounding
+
+Use CLIP (Contrastive Language-Image Pre-training) for zero-shot object grounding:
+
+```python
+import torch
+import torch.nn as nn
+from transformers import CLIPProcessor, CLIPModel
+from PIL import Image
+import numpy as np
+from typing import List, Dict, Tuple
+
+class CLIPObjectGrounder:
+    """
+    Ground language references to objects using CLIP.
+    """
+
+    def __init__(self, model_name="openai/clip-vit-base-patch32"):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # Load CLIP model
+        self.model = CLIPModel.from_pretrained(model_name).to(self.device)
+        self.processor = CLIPProcessor.from_pretrained(model_name)
+
+        self.model.eval()
+
+    def ground_objects(
+        self,
+        image: Image.Image,
+        text_queries: List[str],
+        object_proposals: List[Dict]
+    ) -> List[Dict]:
+        """
+        Ground text queries to object proposals in image.
+
+        Args:
+            image: PIL Image
+            text_queries: List of text descriptions (e.g., ["red cup", "blue bottle"])
+            object_proposals: List of object bounding boxes with format
+                             {'bbox': [x, y, w, h], 'crop': PIL.Image}
+
+        Returns:
+            List of grounded objects with confidence scores
+        """
+        grounded_objects = []
+
+        with torch.no_grad():
+            # Process text queries
+            text_inputs = self.processor(
+                text=text_queries,
+                return_tensors="pt",
+                padding=True
+            ).to(self.device)
+
+            text_features = self.model.get_text_features(**text_inputs)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+            # Process each object proposal
+            for prop in object_proposals:
+                # Get image features for this proposal
+                crop = prop['crop']
+
+                image_inputs = self.processor(
+                    images=crop,
+                    return_tensors="pt"
+                ).to(self.device)
+
+                image_features = self.model.get_image_features(**image_inputs)
+                image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+                # Compute similarity with each text query
+                similarities = (image_features @ text_features.T).squeeze(0)
+
+                # Find best matching query
+                best_match_idx = torch.argmax(similarities).item()
+                best_score = similarities[best_match_idx].item()
+
+                grounded_objects.append({
+                    'bbox': prop['bbox'],
+                    'text_query': text_queries[best_match_idx],
+                    'confidence': best_score,
+                    'all_scores': similarities.cpu().numpy().tolist()
+                })
+
+        # Sort by confidence
+        grounded_objects.sort(key=lambda x: x['confidence'], reverse=True)
+
+        return grounded_objects
+
+    def zero_shot_detection(
+        self,
+        image: Image.Image,
+        text_query: str,
+        object_proposals: List[Dict],
+        threshold: float = 0.25
+    ) -> List[Dict]:
+        """
+        Zero-shot object detection using text query.
+
+        Args:
+            image: PIL Image
+            text_query: Text description of target object
+            object_proposals: List of object proposals
+            threshold: Confidence threshold
+
+        Returns:
+            List of detected objects matching the query
+        """
+        grounded = self.ground_objects(image, [text_query], object_proposals)
+
+        # Filter by threshold
+        detections = [
+            obj for obj in grounded
+            if obj['confidence'] > threshold and obj['text_query'] == text_query
+        ]
+
+        return detections
+```
+
+### Region-Based Grounding
+
+Ground references to specific image regions:
+
+```python
+class RegionGrounder:
+    """
+    Ground linguistic references to specific image regions.
+    """
+
+    def __init__(self):
+        # Object detection model for generating proposals
+        from transformers import DetrImageProcessor, DetrForObjectDetection
+
+        self.processor = DetrImageProcessor.from_pretrained(
+            "facebook/detr-resnet-50"
+        )
+        self.detector = DetrForObjectDetection.from_pretrained(
+            "facebook/detr-resnet-50"
+        )
+
+        self.clip_grounder = CLIPObjectGrounder()
+
+    def generate_object_proposals(
+        self,
+        image: Image.Image,
+        confidence_threshold: float = 0.7
+    ) -> List[Dict]:
+        """
+        Generate object proposals from image.
+
+        Args:
+            image: PIL Image
+            confidence_threshold: Minimum detection confidence
+
+        Returns:
+            List of object proposals
+        """
+        # Prepare image
+        inputs = self.processor(images=image, return_tensors="pt")
+
+        # Run detection
+        with torch.no_grad():
+            outputs = self.detector(**inputs)
+
+        # Post-process detections
+        target_sizes = torch.tensor([image.size[::-1]])
+        results = self.processor.post_process_object_detection(
+            outputs,
+            target_sizes=target_sizes,
+            threshold=confidence_threshold
+        )[0]
+
+        # Extract proposals
+        proposals = []
+        for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+            bbox = box.cpu().numpy()
+            x, y, x2, y2 = bbox
+
+            # Crop region
+            crop = image.crop((x, y, x2, y2))
+
+            proposals.append({
+                'bbox': [x, y, x2 - x, y2 - y],  # [x, y, w, h]
+                'crop': crop,
+                'class_id': label.item(),
+                'confidence': score.item()
+            })
+
+        return proposals
+
+    def ground_text_to_region(
+        self,
+        image: Image.Image,
+        text_query: str
+    ) -> Dict:
+        """
+        Ground text query to image region.
+
+        Args:
+            image: PIL Image
+            text_query: Text description
+
+        Returns:
+            Best matching region
+        """
+        # Generate proposals
+        proposals = self.generate_object_proposals(image)
+
+        if not proposals:
+            return {'status': 'no_proposals', 'confidence': 0.0}
+
+        # Ground using CLIP
+        detections = self.clip_grounder.zero_shot_detection(
+            image, text_query, proposals
+        )
+
+        if not detections:
+            return {'status': 'no_match', 'confidence': 0.0}
+
+        # Return best match
+        best_match = detections[0]
+        return {
+            'status': 'success',
+            'bbox': best_match['bbox'],
+            'confidence': best_match['confidence'],
+            'query': text_query
+        }
+```
+
+## Spatial Grounding
+
+### Spatial Relationship Understanding
+
+Ground spatial relationships mentioned in language:
+
+```python
+class SpatialGrounder:
+    """
+    Ground spatial relationships in visual scenes.
+    """
+
+    def __init__(self):
+        self.region_grounder = RegionGrounder()
+
+    def compute_spatial_relationships(
+        self,
+        objects: List[Dict]
+    ) -> Dict[Tuple[int, int], List[str]]:
+        """
+        Compute spatial relationships between objects.
+
+        Args:
+            objects: List of detected objects with bboxes
+
+        Returns:
+            Dictionary mapping object pairs to relationship labels
+        """
+        relationships = {}
+
+        for i, obj1 in enumerate(objects):
+            for j, obj2 in enumerate(objects):
+                if i == j:
+                    continue
+
+                bbox1 = obj1['bbox']  # [x, y, w, h]
+                bbox2 = obj2['bbox']
+
+                # Compute relationships
+                rels = self._compute_pairwise_relationships(bbox1, bbox2)
+
+                if rels:
+                    relationships[(i, j)] = rels
+
+        return relationships
+
+    def _compute_pairwise_relationships(
+        self,
+        bbox1: List[float],
+        bbox2: List[float]
+    ) -> List[str]:
+        """Compute relationships between two bounding boxes."""
+        x1, y1, w1, h1 = bbox1
+        x2, y2, w2, h2 = bbox2
+
+        # Centers
+        cx1, cy1 = x1 + w1/2, y1 + h1/2
+        cx2, cy2 = x2 + w2/2, y2 + h2/2
+
+        relationships = []
+
+        # Above/Below
+        if cy1 < cy2 - h2/2:
+            relationships.append('above')
+        elif cy1 > cy2 + h2/2:
+            relationships.append('below')
+
+        # Left/Right
+        if cx1 < cx2 - w2/2:
+            relationships.append('left_of')
+        elif cx1 > cx2 + w2/2:
+            relationships.append('right_of')
+
+        # Proximity
+        distance = np.sqrt((cx1 - cx2)**2 + (cy1 - cy2)**2)
+        max_dist = max(w1, w2, h1, h2)
+
+        if distance < max_dist * 1.5:
+            relationships.append('near')
+
+        # Containment (overlap)
+        if self._check_overlap(bbox1, bbox2):
+            overlap_ratio = self._compute_overlap_ratio(bbox1, bbox2)
+            if overlap_ratio > 0.7:
+                relationships.append('overlapping')
+
+        return relationships
+
+    def _check_overlap(self, bbox1: List[float], bbox2: List[float]) -> bool:
+        """Check if two bboxes overlap."""
+        x1, y1, w1, h1 = bbox1
+        x2, y2, w2, h2 = bbox2
+
+        return not (x1 + w1 < x2 or x2 + w2 < x1 or
+                   y1 + h1 < y2 or y2 + h2 < y1)
+
+    def _compute_overlap_ratio(self, bbox1: List[float], bbox2: List[float]) -> float:
+        """Compute IoU between two bboxes."""
+        x1, y1, w1, h1 = bbox1
+        x2, y2, w2, h2 = bbox2
+
+        # Intersection
+        x_overlap = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+        y_overlap = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+        intersection = x_overlap * y_overlap
+
+        # Union
+        area1 = w1 * h1
+        area2 = w2 * h2
+        union = area1 + area2 - intersection
+
+        return intersection / union if union > 0 else 0.0
+
+    def ground_spatial_query(
+        self,
+        image: Image.Image,
+        query: str
+    ) -> Dict:
+        """
+        Ground spatial query like "the cup on the table".
+
+        Args:
+            image: PIL Image
+            query: Spatial query
+
+        Returns:
+            Grounded result with object and spatial relationship
+        """
+        # Parse query to extract object and spatial relation
+        # This is simplified - would use semantic parser in practice
+        parts = query.lower().split(' on ')
+
+        if len(parts) != 2:
+            # Try other prepositions
+            for prep in [' above ', ' below ', ' next to ', ' near ']:
+                if prep in query.lower():
+                    parts = query.lower().split(prep)
+                    break
+
+        if len(parts) != 2:
+            return {'status': 'failed', 'reason': 'Could not parse spatial query'}
+
+        target_obj = parts[0].strip()
+        reference_obj = parts[1].strip()
+
+        # Detect all objects
+        proposals = self.region_grounder.generate_object_proposals(image)
+
+        # Ground both objects
+        target_detections = self.region_grounder.clip_grounder.zero_shot_detection(
+            image, target_obj, proposals
+        )
+        reference_detections = self.region_grounder.clip_grounder.zero_shot_detection(
+            image, reference_obj, proposals
+        )
+
+        if not target_detections or not reference_detections:
+            return {'status': 'failed', 'reason': 'Could not find objects'}
+
+        # Find objects with correct spatial relationship
+        objects = target_detections + reference_detections
+        relationships = self.compute_spatial_relationships(objects)
+
+        # Find matching pair
+        for (i, j), rels in relationships.items():
+            if 'above' in rels or 'on' in rels:  # Simplified
+                return {
+                    'status': 'success',
+                    'target': target_detections[i] if i < len(target_detections) else None,
+                    'reference': reference_detections[j - len(target_detections)] if j >= len(target_detections) else None,
+                    'relationship': rels
+                }
+
+        return {'status': 'failed', 'reason': 'No matching spatial relationship found'}
+```
+
+## Visual Question Answering for Grounding
+
+### VQA-Based Grounding
+
+Use visual question answering to verify grounding:
+
+```python
+from transformers import ViltProcessor, ViltForQuestionAnswering
+
+class VQAGroundingVerifier:
+    """
+    Verify grounding results using visual question answering.
+    """
+
+    def __init__(self):
+        self.processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+        self.model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
+
+    def verify_object_presence(
+        self,
+        image: Image.Image,
+        object_name: str
+    ) -> Dict:
+        """
+        Verify if object is present in image using VQA.
+
+        Args:
+            image: PIL Image
+            object_name: Name of object to verify
+
+        Returns:
+            Verification result with confidence
+        """
+        # Ask "Is there a {object_name}?"
+        question = f"Is there a {object_name}?"
+
+        # Process inputs
+        inputs = self.processor(image, question, return_tensors="pt")
+
+        # Get answer
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        logits = outputs.logits
+        idx = logits.argmax(-1).item()
+        answer = self.model.config.id2label[idx]
+
+        confidence = torch.softmax(logits, dim=-1)[0, idx].item()
+
+        return {
+            'present': answer.lower() in ['yes', 'true'],
+            'answer': answer,
+            'confidence': confidence,
+            'question': question
+        }
+
+    def verify_spatial_relationship(
+        self,
+        image: Image.Image,
+        object1: str,
+        relation: str,
+        object2: str
+    ) -> Dict:
+        """
+        Verify spatial relationship using VQA.
+
+        Args:
+            image: PIL Image
+            object1: First object
+            relation: Spatial relation ('on', 'above', 'next to', etc.)
+            object2: Second object
+
+        Returns:
+            Verification result
+        """
+        question = f"Is the {object1} {relation} the {object2}?"
+
+        inputs = self.processor(image, question, return_tensors="pt")
+
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        logits = outputs.logits
+        idx = logits.argmax(-1).item()
+        answer = self.model.config.id2label[idx]
+
+        confidence = torch.softmax(logits, dim=-1)[0, idx].item()
+
+        return {
+            'verified': answer.lower() in ['yes', 'true'],
+            'answer': answer,
+            'confidence': confidence,
+            'question': question
+        }
+```
+
+## Attention-Based Grounding
+
+### Cross-Modal Attention Visualization
+
+Visualize where the model attends when grounding:
+
+```python
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+class AttentionVisualizer:
+    """
+    Visualize cross-modal attention for grounding.
+    """
+
+    def __init__(self, vla_model):
+        self.model = vla_model
+
+    def get_attention_maps(
+        self,
+        image: torch.Tensor,
+        text: str
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Extract attention maps from VLA model.
+
+        Args:
+            image: Image tensor [3, H, W]
+            text: Text query
+
+        Returns:
+            Dictionary of attention maps
+        """
+        self.model.eval()
+
+        with torch.no_grad():
+            # Forward pass with attention tracking
+            image_batch = image.unsqueeze(0)
+            text_batch = [text]
+
+            # Get vision features
+            vision_features = self.model.vision_encoder(image_batch)
+
+            # Get language features
+            language_features = self.model.language_encoder(text_batch)
+
+            # Get attention weights from fusion module
+            # This assumes the fusion module exposes attention weights
+            fusion_output = self.model.fusion(vision_features, language_features)
+
+            # Extract attention maps
+            attention_maps = {}
+
+            if hasattr(self.model.fusion, 'get_attention_weights'):
+                attention_weights = self.model.fusion.get_attention_weights()
+                attention_maps['cross_modal'] = attention_weights
+
+        return attention_maps
+
+    def visualize_grounding(
+        self,
+        image: Image.Image,
+        text: str,
+        grounding_result: Dict
+    ):
+        """
+        Visualize grounding result on image.
+
+        Args:
+            image: PIL Image
+            text: Text query
+            grounding_result: Grounding result with bbox
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as patches
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+        # Display image
+        ax.imshow(image)
+
+        # Draw bounding box
+        if 'bbox' in grounding_result:
+            bbox = grounding_result['bbox']
+            x, y, w, h = bbox
+
+            rect = patches.Rectangle(
+                (x, y), w, h,
+                linewidth=3,
+                edgecolor='red',
+                facecolor='none'
+            )
+            ax.add_patch(rect)
+
+            # Add label
+            label = f"{text}\nConf: {grounding_result.get('confidence', 0):.2f}"
+            ax.text(
+                x, y - 10,
+                label,
+                color='white',
+                backgroundcolor='red',
+                fontsize=12
+            )
+
+        ax.axis('off')
+        ax.set_title(f"Grounded: '{text}'", fontsize=14)
+
+        plt.tight_layout()
+        plt.show()
+```
+
+## Integration with Robot Actions
+
+### Grounding to Action Conversion
+
+Convert grounded references to robot actions:
+
+```python
+class GroundingToActionConverter:
+    """
+    Convert grounded visual references to robot actions.
+    """
+
+    def __init__(self):
+        self.region_grounder = RegionGrounder()
+        self.spatial_grounder = SpatialGrounder()
+
+    def ground_and_act(
+        self,
+        image: Image.Image,
+        command: str,
+        camera_intrinsics: Dict
+    ) -> Dict:
+        """
+        Ground command and convert to robot action.
+
+        Args:
+            image: Current camera image
+            command: Natural language command
+            camera_intrinsics: Camera parameters for 3D projection
+
+        Returns:
+            Robot action specification
+        """
+        # Ground the command to visual elements
+        grounding_result = self.region_grounder.ground_text_to_region(image, command)
+
+        if grounding_result['status'] != 'success':
+            return {
+                'success': False,
+                'error': 'Failed to ground command to visual scene'
+            }
+
+        # Convert 2D bbox to 3D position estimate
+        bbox = grounding_result['bbox']
+        position_3d = self.estimate_3d_position(bbox, camera_intrinsics)
+
+        # Create action specification
+        action_spec = {
+            'success': True,
+            'action_type': 'reach',
+            'target_position': position_3d,
+            'target_bbox': bbox,
+            'confidence': grounding_result['confidence'],
+            'grounded_object': command
+        }
+
+        return action_spec
+
+    def estimate_3d_position(
+        self,
+        bbox_2d: List[float],
+        camera_intrinsics: Dict,
+        assumed_depth: float = 1.0
+    ) -> List[float]:
+        """
+        Estimate 3D position from 2D bbox and camera parameters.
+
+        Args:
+            bbox_2d: 2D bounding box [x, y, w, h]
+            camera_intrinsics: Camera parameters (fx, fy, cx, cy)
+            assumed_depth: Assumed depth in meters
+
+        Returns:
+            Estimated 3D position [x, y, z]
+        """
+        x, y, w, h = bbox_2d
+
+        # Center of bbox
+        u = x + w / 2
+        v = y + h / 2
+
+        # Camera intrinsics
+        fx = camera_intrinsics['fx']
+        fy = camera_intrinsics['fy']
+        cx = camera_intrinsics['cx']
+        cy = camera_intrinsics['cy']
+
+        # Back-project to 3D
+        z = assumed_depth
+        x_3d = (u - cx) * z / fx
+        y_3d = (v - cy) * z / fy
+
+        return [x_3d, y_3d, z]
+```
+
+## Best Practices
+
+1. **Multi-Modal Pre-training**: Use models pre-trained on large vision-language datasets (CLIP, ALIGN)
+2. **Zero-Shot Capability**: Design systems that can ground novel object categories
+3. **Spatial Reasoning**: Implement robust spatial relationship understanding
+4. **Verification**: Use VQA or other methods to verify grounding results
+5. **3D Grounding**: Convert 2D visual grounding to 3D robot coordinates
+6. **Attention Visualization**: Visualize attention to debug and improve grounding
+7. **Error Handling**: Gracefully handle failed grounding attempts
+
+Vision grounding connects language understanding with visual perception, enabling robots to identify and locate objects and relationships mentioned in natural language commands.

@@ -1,0 +1,971 @@
+---
+title: "Unity Visualization"
+description: "Learn about Unity for advanced visualization and interaction in humanoid robotics"
+tags: [unity, visualization, simulation, robotics, graphics]
+sidebar_label: "Unity Visualization"
+sidebar_position: 4
+keywords: [unity, visualization, robotics, graphics, simulation]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# Unity Visualization
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+Unity has emerged as a powerful platform for robotics visualization and simulation, offering high-quality graphics, advanced rendering capabilities, and sophisticated interaction systems. In this chapter, we'll explore how Unity can be leveraged for humanoid robotics applications, from creating photorealistic simulation environments to developing intuitive human-robot interaction interfaces.
+
+Unity's strength lies in its ability to create visually compelling and interactive experiences that can enhance robot development, testing, and human-robot interaction. Combined with its robust physics engine and extensive asset ecosystem, Unity provides a unique environment for creating advanced digital twins that bridge the gap between simulation and reality.
+
+### Learning Objectives
+
+- Understand Unity's role in robotics visualization and simulation
+- Create realistic 3D environments for humanoid robot simulation
+- Implement advanced visualization techniques for robot data
+- Develop human-robot interaction interfaces using Unity
+- Integrate Unity with ROS 2 systems for bidirectional communication
+- Optimize Unity scenes for real-time robotics applications
+
+### Prerequisites
+
+- Basic understanding of Unity development environment
+- Knowledge of 3D graphics concepts
+- Understanding of ROS 2 communication patterns from Module 1
+- Familiarity with humanoid robot kinematics and dynamics
+
+## Deep Explanation
+
+### Unity in Robotics Context
+
+Unity serves several important roles in robotics development:
+
+#### Visualization Platform
+- High-quality rendering for robot and environment visualization
+- Real-time camera feeds and sensor data visualization
+- Advanced lighting and material systems
+- Photorealistic rendering capabilities
+
+#### Interaction Interface
+- Intuitive user interfaces for robot control and monitoring
+- Virtual reality (VR) and augmented reality (AR) support
+- Multi-modal interaction systems
+- Remote operation interfaces
+
+#### Simulation Environment
+- Physics simulation capabilities (though typically combined with other engines for robotics)
+- Environmental modeling and scenario creation
+- Human-in-the-loop simulation
+- Training environment for AI development
+
+### Unity Robotics Ecosystem
+
+Unity provides several tools and packages specifically for robotics:
+
+#### Unity Robotics Hub
+- Collection of tools, samples, and documentation
+- ROS# communication library
+- Robot samples and tutorials
+- Best practices and guidelines
+
+#### Unity ML-Agents
+- Reinforcement learning toolkit
+- Training AI agents in Unity environments
+- Integration with popular ML frameworks
+- Curriculum learning capabilities
+
+#### Unity Perception
+- Synthetic data generation for computer vision
+- Domain randomization techniques
+- Sensor simulation tools
+- Annotation and dataset generation
+
+### Visualization Techniques for Robotics
+
+Effective robotics visualization requires specialized techniques:
+
+#### Robot State Visualization
+- Joint position and velocity displays
+- Trajectory and path visualization
+- Force and torque visualization
+- Sensor data overlay
+
+#### Environmental Visualization
+- 3D mapping and localization visualization
+- Occupancy grids and point clouds
+- Dynamic obstacle representation
+- Multi-sensor fusion visualization
+
+#### Data Visualization
+- Real-time plotting of robot metrics
+- Performance analytics dashboards
+- Sensor fusion visualization
+- Behavior and decision visualization
+
+### Unity-ROS Integration
+
+The integration between Unity and ROS 2 enables bidirectional communication:
+
+#### ROS# Communication Library
+- .NET-based ROS client for Unity
+- Support for common ROS message types
+- Service and action client implementations
+- Real-time communication capabilities
+
+#### Message Handling
+- Custom message type generation
+- Efficient serialization/deserialization
+- Quality of Service (QoS) configuration
+- Connection management and error handling
+
+### Performance Considerations
+
+Unity applications for robotics must balance visual quality with performance:
+
+#### Real-time Requirements
+- Maintaining high frame rates for interaction
+- Efficient rendering techniques
+- Level of detail (LOD) systems
+- Occlusion culling and frustum culling
+
+#### Resource Management
+- Memory optimization for long-running applications
+- Asset streaming and loading strategies
+- Physics simulation optimization
+- Network communication efficiency
+
+## Practical Examples
+
+### Example 1: Unity Robot Visualization Setup
+
+<Tabs>
+<TabItem value="robot_controller" label="Robot Controller Script" default>
+
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Unity.Robotics.ROSTCPConnector;
+using RosMessageTypes.Sensor;
+using RosMessageTypes.Std;
+using RosMessageTypes.Geometry;
+
+public class RobotController : MonoBehaviour
+{
+    [Header("ROS Connection")]
+    public string rosIPAddress = "127.0.0.1";
+    public int rosPort = 10000;
+
+    [Header("Robot Configuration")]
+    public string jointStatesTopic = "/joint_states";
+    public string cmdVelTopic = "/cmd_vel";
+
+    [Header("Joint Mapping")]
+    public Dictionary<string, Transform> jointMap = new Dictionary<string, Transform>();
+
+    [Header("Visualization Settings")]
+    public float positionScale = 1.0f;
+    public float rotationScale = 1.0f;
+
+    private ROSConnection ros;
+    private JointStateMsg latestJointState;
+
+    void Start()
+    {
+        // Initialize ROS connection
+        ros = ROSConnection.GetOrCreateInstance();
+        ros.Initialize(rosIPAddress, rosPort);
+
+        // Subscribe to joint states
+        ros.Subscribe<JointStateMsg>(jointStatesTopic, OnJointStateReceived);
+
+        // Initialize joint mapping (this would typically be set up in the Unity Editor)
+        InitializeJointMap();
+    }
+
+    void InitializeJointMap()
+    {
+        // This is where you would map joint names to Unity transforms
+        // In a real implementation, this would be done via the Unity Editor
+        // or by searching for child objects with specific naming conventions
+
+        // Example mapping (you would replace these with actual joint names and transforms):
+        Transform[] allChildren = GetComponentsInChildren<Transform>();
+        foreach (Transform child in allChildren)
+        {
+            if (child.name.Contains("joint") || child.name.Contains("Joint"))
+            {
+                jointMap[child.name.ToLower()] = child;
+            }
+        }
+    }
+
+    void OnJointStateReceived(JointStateMsg msg)
+    {
+        latestJointState = msg;
+        UpdateRobotVisualization();
+    }
+
+    void UpdateRobotVisualization()
+    {
+        if (latestJointState == null || latestJointState.name == null)
+            return;
+
+        // Update each joint based on received positions
+        for (int i = 0; i < latestJointState.name.Length; i++)
+        {
+            string jointName = latestJointState.name[i].ToLower();
+            float jointPosition = latestJointState.position[i];
+
+            if (jointMap.ContainsKey(jointName))
+            {
+                Transform jointTransform = jointMap[jointName];
+
+                // Apply rotation based on joint position
+                // This assumes the joint rotates around the Z-axis
+                // You may need to adjust the rotation axis based on your robot model
+                jointTransform.localRotation = Quaternion.Euler(0, 0, jointPosition * Mathf.Rad2Deg * rotationScale);
+            }
+        }
+    }
+
+    void Update()
+    {
+        // Continuous update loop for real-time visualization
+        // Additional visualization updates can be performed here
+    }
+
+    // Method to send velocity commands to the robot
+    public void SendVelocityCommand(float linearX, float angularZ)
+    {
+        var cmdVel = new TwistMsg();
+        cmdVel.linear = new Vector3Msg(linearX, 0, 0);  // Move forward/backward
+        cmdVel.angular = new Vector3Msg(0, 0, angularZ);  // Rotate left/right
+
+        ros.Publish(cmdVelTopic, cmdVel);
+    }
+}
+```
+
+</TabItem>
+<TabItem value="sensor_visualizer" label="Sensor Data Visualizer">
+
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Unity.Robotics.ROSTCPConnector;
+using RosMessageTypes.Sensor;
+using RosMessageTypes.Geometry;
+using RosMessageTypes.Nav;
+
+public class SensorDataVisualizer : MonoBehaviour
+{
+    [Header("Topic Configuration")]
+    public string laserScanTopic = "/scan";
+    public string imuTopic = "/imu/data";
+    public string cameraTopic = "/camera/image_raw";  // This would be handled differently in practice
+
+    [Header("Visualization Settings")]
+    public GameObject laserScanPrefab;
+    public Material laserMaterial;
+    public float maxLaserDistance = 10.0f;
+    public int laserScanResolution = 360;
+
+    [Header("IMU Visualization")]
+    public GameObject imuVisualizer;
+    public float imuScale = 1.0f;
+
+    private ROSConnection ros;
+    private LaserScanMsg latestLaserScan;
+    private ImuMsg latestImuData;
+    private LineRenderer laserLineRenderer;
+
+    void Start()
+    {
+        ros = ROSConnection.GetOrCreateInstance();
+
+        // Subscribe to sensor topics
+        ros.Subscribe<LaserScanMsg>(laserScanTopic, OnLaserScanReceived);
+        ros.Subscribe<ImuMsg>(imuTopic, OnImuReceived);
+
+        // Setup laser scan visualization
+        SetupLaserScanVisualization();
+    }
+
+    void SetupLaserScanVisualization()
+    {
+        if (laserScanPrefab != null)
+        {
+            GameObject laserScanGO = Instantiate(laserScanPrefab, transform);
+            laserLineRenderer = laserScanGO.GetComponent<LineRenderer>();
+
+            if (laserLineRenderer != null)
+            {
+                laserLineRenderer.material = laserMaterial;
+                laserLineRenderer.positionCount = laserScanResolution;
+                laserLineRenderer.useWorldSpace = false;
+            }
+        }
+    }
+
+    void OnLaserScanReceived(LaserScanMsg msg)
+    {
+        latestLaserScan = msg;
+        UpdateLaserScanVisualization();
+    }
+
+    void OnImuReceived(ImuMsg msg)
+    {
+        latestImuData = msg;
+        UpdateImuVisualization();
+    }
+
+    void UpdateLaserScanVisualization()
+    {
+        if (latestLaserScan == null || laserLineRenderer == null)
+            return;
+
+        // Update line renderer with laser scan data
+        Vector3[] points = new Vector3[latestLaserScan.ranges.Length];
+
+        for (int i = 0; i < latestLaserScan.ranges.Length; i++)
+        {
+            float angle = latestLaserScan.angle_min + (i * latestLaserScan.angle_increment);
+            float distance = latestLaserScan.ranges[i];
+
+            // Limit distance to max for visualization
+            if (float.IsNaN(distance) || float.IsInfinity(distance))
+                distance = maxLaserDistance;
+            else
+                distance = Mathf.Min(distance, maxLaserDistance);
+
+            // Calculate position in 2D polar coordinates
+            float x = distance * Mathf.Cos(angle);
+            float y = distance * Mathf.Sin(angle);
+
+            points[i] = new Vector3(x, 0, y);  // Unity Y is up, so laser is in XZ plane
+        }
+
+        laserLineRenderer.positionCount = points.Length;
+        laserLineRenderer.SetPositions(points);
+    }
+
+    void UpdateImuVisualization()
+    {
+        if (latestImuData == null || imuVisualizer == null)
+            return;
+
+        // Convert quaternion from IMU to Unity rotation
+        // ROS uses a different coordinate system than Unity
+        var orientation = latestImuData.orientation;
+
+        // Convert ROS quaternion (x, y, z, w) to Unity quaternion
+        // ROS: X forward, Y left, Z up
+        // Unity: X right, Y up, Z forward
+        Quaternion unityRotation = new Quaternion(
+            orientation.y,    // ROS Y -> Unity X
+            orientation.z,    // ROS Z -> Unity Y
+            orientation.x,    // ROS X -> Unity Z
+            orientation.w     // W remains W
+        );
+
+        // Apply the rotation to the IMU visualizer
+        imuVisualizer.transform.rotation = unityRotation * Quaternion.Euler(90, 0, 0);
+    }
+
+    // Additional visualization methods
+    public void HighlightObstacle(float x, float y, float z)
+    {
+        // Create a visual indicator for detected obstacles
+        GameObject obstacleIndicator = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        obstacleIndicator.transform.position = new Vector3(x, y, z);
+        obstacleIndicator.transform.localScale = Vector3.one * 0.1f;
+
+        Renderer renderer = obstacleIndicator.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            renderer.material = new Material(Shader.Find("Unlit/Color"));
+            renderer.material.color = Color.red;
+        }
+
+        // Destroy after a few seconds
+        Destroy(obstacleIndicator, 3.0f);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+### Example 2: Unity Environment and Human-Robot Interaction
+
+<Tabs>
+<TabItem value="environment_manager" label="Environment Manager">
+
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Unity.Robotics.ROSTCPConnector;
+using RosMessageTypes.Std;
+using RosMessageTypes.Geometry;
+
+public class EnvironmentManager : MonoBehaviour
+{
+    [Header("Environment Configuration")]
+    public GameObject[] interactiveObjects;
+    public Material[] environmentMaterials;
+    public Light[] sceneLights;
+
+    [Header("Human-Robot Interaction")]
+    public Camera mainCamera;
+    public float interactionDistance = 5.0f;
+    public LayerMask interactionLayer;
+
+    [Header("ROS Communication")]
+    public string objectDetectionTopic = "/detected_objects";
+    public string navigationGoalTopic = "/move_base_simple/goal";
+
+    private ROSConnection ros;
+    private List<GameObject> spawnedObjects = new List<GameObject>();
+    private RaycastHit interactionHit;
+
+    void Start()
+    {
+        ros = ROSConnection.GetOrCreateInstance();
+
+        // Initialize environment
+        SetupEnvironment();
+    }
+
+    void SetupEnvironment()
+    {
+        // Apply random materials to environment objects for variety
+        foreach (GameObject obj in interactiveObjects)
+        {
+            if (obj != null && obj.GetComponent<Renderer>() != null)
+            {
+                Material randomMaterial = environmentMaterials[Random.Range(0, environmentMaterials.Length)];
+                obj.GetComponent<Renderer>().material = randomMaterial;
+            }
+        }
+
+        // Configure lights
+        foreach (Light light in sceneLights)
+        {
+            if (light != null)
+            {
+                light.intensity = Random.Range(0.8f, 1.2f);
+                light.color = GetRandomWarmColor();
+            }
+        }
+    }
+
+    Color GetRandomWarmColor()
+    {
+        // Generate warm light colors (yellows, oranges, whites)
+        float r = Random.Range(0.8f, 1.0f);
+        float g = Random.Range(0.7f, 1.0f);
+        float b = Random.Range(0.6f, 0.9f);
+        return new Color(r, g, b);
+    }
+
+    void Update()
+    {
+        HandleUserInput();
+        HandleRaycastInteraction();
+    }
+
+    void HandleUserInput()
+    {
+        // Handle mouse clicks for interaction
+        if (Input.GetMouseButtonDown(0))
+        {
+            Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
+            RaycastHit hit;
+
+            if (Physics.Raycast(ray, out hit, interactionDistance, interactionLayer))
+            {
+                // Object clicked - send interaction command to robot
+                HandleObjectInteraction(hit.collider.gameObject, hit.point);
+            }
+        }
+
+        // Handle keyboard commands
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            SendRobotStopCommand();
+        }
+
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            ResetEnvironment();
+        }
+    }
+
+    void HandleRaycastInteraction()
+    {
+        // Continuous raycast for highlighting
+        Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
+
+        if (Physics.Raycast(ray, out interactionHit, interactionDistance, interactionLayer))
+        {
+            // Highlight the object being looked at
+            HighlightObject(interactionHit.collider.gameObject, true);
+        }
+        else
+        {
+            // Remove highlight from previously highlighted object
+            if (interactionHit.collider != null)
+            {
+                HighlightObject(interactionHit.collider.gameObject, false);
+                interactionHit = new RaycastHit(); // Reset
+            }
+        }
+    }
+
+    void HandleObjectInteraction(GameObject targetObject, Vector3 hitPoint)
+    {
+        // Determine what type of interaction to send to the robot
+        string objectType = targetObject.tag;  // Assuming objects have tags
+
+        switch (objectType)
+        {
+            case "NavigablePoint":
+                SendNavigationGoal(hitPoint);
+                break;
+            case "InteractiveObject":
+                SendManipulationCommand(targetObject.name, hitPoint);
+                break;
+            case "Obstacle":
+                SendAvoidanceCommand(hitPoint);
+                break;
+            default:
+                Debug.Log("Unknown object type: " + objectType);
+                break;
+        }
+    }
+
+    void SendNavigationGoal(Vector3 goalPosition)
+    {
+        // Send a navigation goal to the robot
+        var goal = new PoseStampedMsg();
+        goal.header = new HeaderMsg();
+        goal.header.stamp = new TimeMsg(System.DateTime.UtcNow.Second, System.DateTime.UtcNow.Millisecond * 1000000);
+        goal.header.frame_id = "map";
+
+        // Convert Unity coordinates to ROS coordinates
+        goal.pose = new PoseMsg();
+        goal.pose.position = new Vector3Msg(goalPosition.x, goalPosition.z, goalPosition.y);  // Unity Y->ROS Z, Unity Z->ROS Y
+        goal.pose.orientation = new QuaternionMsg(0, 0, 0, 1);  // Default orientation
+
+        // In a real implementation, you would publish this to the navigation system
+        Debug.Log($"Sending navigation goal to: ({goal.pose.position.x}, {goal.pose.position.y}, {goal.pose.position.z})");
+    }
+
+    void SendManipulationCommand(string objectName, Vector3 targetPosition)
+    {
+        // Send manipulation command to the robot
+        Debug.Log($"Sending manipulation command for object: {objectName} at ({targetPosition.x}, {targetPosition.y}, {targetPosition.z})");
+
+        // In a real implementation, you would send specific manipulation commands via ROS
+        // This could include pick/place commands, grasp poses, etc.
+    }
+
+    void SendAvoidanceCommand(Vector3 obstaclePosition)
+    {
+        // Send obstacle avoidance command
+        Debug.Log($"Sending obstacle avoidance for: ({obstaclePosition.x}, {obstaclePosition.y}, {obstaclePosition.z})");
+    }
+
+    void SendRobotStopCommand()
+    {
+        // Send emergency stop command to robot
+        Debug.Log("Sending robot stop command");
+
+        // In a real implementation, you would publish a zero velocity command
+        // or call an emergency stop service
+    }
+
+    void HighlightObject(GameObject obj, bool highlight)
+    {
+        if (obj == null) return;
+
+        Renderer renderer = obj.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            if (highlight)
+            {
+                // Store original material to restore later
+                if (!obj.GetComponent<ObjectHighlight>())
+                {
+                    ObjectHighlight highlightComponent = obj.AddComponent<ObjectHighlight>();
+                    highlightComponent.originalMaterial = renderer.material;
+                }
+
+                // Apply highlight material
+                renderer.material = CreateHighlightMaterial();
+            }
+            else
+            {
+                // Restore original material
+                ObjectHighlight highlightComponent = obj.GetComponent<ObjectHighlight>();
+                if (highlightComponent != null && highlightComponent.originalMaterial != null)
+                {
+                    renderer.material = highlightComponent.originalMaterial;
+                }
+            }
+        }
+    }
+
+    Material CreateHighlightMaterial()
+    {
+        Material highlightMat = new Material(Shader.Find("Standard"));
+        highlightMat.color = Color.yellow;
+        highlightMat.SetFloat("_Metallic", 0.5f);
+        highlightMat.SetFloat("_Smoothness", 0.5f);
+        return highlightMat;
+    }
+
+    void ResetEnvironment()
+    {
+        // Reset the environment to initial state
+        Debug.Log("Resetting environment");
+
+        // Clear spawned objects
+        foreach (GameObject obj in spawnedObjects)
+        {
+            if (obj != null)
+                Destroy(obj);
+        }
+        spawnedObjects.Clear();
+
+        // Reset environment objects to initial state
+        SetupEnvironment();
+    }
+}
+
+// Helper class to store original materials
+public class ObjectHighlight : MonoBehaviour
+{
+    public Material originalMaterial;
+}
+```
+
+</TabItem>
+<TabItem value="ui_manager" label="UI Manager">
+
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using Unity.Robotics.ROSTCPConnector;
+using RosMessageTypes.Sensor;
+using RosMessageTypes.Std;
+
+public class UIManager : MonoBehaviour
+{
+    [Header("UI Elements")]
+    public Text robotStatusText;
+    public Text jointStateText;
+    public Text sensorDataText;
+    public Slider simulationSpeedSlider;
+    public Button resetSimulationButton;
+    public Toggle pauseSimulationToggle;
+
+    [Header("Visualization Panels")]
+    public GameObject jointControlPanel;
+    public GameObject sensorVisualizationPanel;
+    public GameObject robotControlPanel;
+
+    [Header("ROS Configuration")]
+    public string robotStatusTopic = "/robot_status";
+    public string jointStatesTopic = "/joint_states";
+
+    private ROSConnection ros;
+    private JointStateMsg latestJointState;
+    private bool simulationPaused = false;
+    private float simulationSpeed = 1.0f;
+
+    void Start()
+    {
+        ros = ROSConnection.GetOrCreateInstance();
+
+        // Subscribe to robot status
+        ros.Subscribe<StringMsg>(robotStatusTopic, OnRobotStatusReceived);
+        ros.Subscribe<JointStateMsg>(jointStatesTopic, OnJointStateReceived);
+
+        // Setup UI event handlers
+        SetupUIEvents();
+
+        // Initialize UI
+        UpdateRobotStatusDisplay();
+        UpdateJointStateDisplay();
+    }
+
+    void SetupUIEvents()
+    {
+        if (simulationSpeedSlider != null)
+        {
+            simulationSpeedSlider.onValueChanged.AddListener(OnSimulationSpeedChanged);
+        }
+
+        if (resetSimulationButton != null)
+        {
+            resetSimulationButton.onClick.AddListener(OnResetSimulationClicked);
+        }
+
+        if (pauseSimulationToggle != null)
+        {
+            pauseSimulationToggle.onValueChanged.AddListener(OnPauseToggled);
+        }
+    }
+
+    void OnRobotStatusReceived(StringMsg msg)
+    {
+        // Update robot status from ROS message
+        if (robotStatusText != null)
+        {
+            robotStatusText.text = "Robot Status: " + msg.data;
+        }
+    }
+
+    void OnJointStateReceived(JointStateMsg msg)
+    {
+        latestJointState = msg;
+        UpdateJointStateDisplay();
+    }
+
+    void UpdateRobotStatusDisplay()
+    {
+        if (robotStatusText != null)
+        {
+            robotStatusText.text = "Robot Status: " + (simulationPaused ? "PAUSED" : "RUNNING");
+        }
+    }
+
+    void UpdateJointStateDisplay()
+    {
+        if (latestJointState != null && jointStateText != null)
+        {
+            string jointInfo = "Joint States:\n";
+
+            for (int i = 0; i < Mathf.Min(latestJointState.name.Length, latestJointState.position.Length); i++)
+            {
+                jointInfo += $"{latestJointState.name[i]}: {latestJointState.position[i]:F3} rad";
+
+                if (i < latestJointState.velocity.Length)
+                    jointInfo += $" ({latestJointState.velocity[i]:F3} rad/s)";
+
+                jointInfo += "\n";
+            }
+
+            jointStateText.text = jointInfo;
+        }
+    }
+
+    void UpdateSensorDataDisplay()
+    {
+        if (sensorDataText != null)
+        {
+            // This would be updated with real sensor data
+            sensorDataText.text = "Sensor Data:\n" +
+                                 "IMU: Connected\n" +
+                                 "Cameras: 2/2 Online\n" +
+                                 "LIDAR: Connected\n" +
+                                 "Force/Torque: 6/6 Active";
+        }
+    }
+
+    public void OnSimulationSpeedChanged(float value)
+    {
+        simulationSpeed = value;
+        Debug.Log($"Simulation speed changed to: {simulationSpeed}x");
+
+        // In a real implementation, you would send this to the simulation engine
+        // This might involve adjusting physics time steps or animation speeds
+    }
+
+    public void OnResetSimulationClicked()
+    {
+        Debug.Log("Reset simulation clicked");
+
+        // Reset all simulation components
+        ResetRobotPosition();
+        ResetEnvironment();
+        ClearVisualization();
+    }
+
+    public void OnPauseToggled(bool paused)
+    {
+        simulationPaused = paused;
+        UpdateRobotStatusDisplay();
+
+        // In a real implementation, you would pause/unpause the simulation
+        // This might involve stopping physics updates, animations, etc.
+    }
+
+    void ResetRobotPosition()
+    {
+        // Reset robot to initial position
+        // This would involve sending commands to reset the robot in the simulation
+        Debug.Log("Resetting robot position");
+    }
+
+    void ResetEnvironment()
+    {
+        // Reset environment objects to initial state
+        Debug.Log("Resetting environment");
+    }
+
+    void ClearVisualization()
+    {
+        // Clear any temporary visualization elements
+        Debug.Log("Clearing visualization");
+    }
+
+    void Update()
+    {
+        // Update UI elements that need continuous updates
+        UpdateSensorDataDisplay();
+
+        // Update simulation if not paused
+        if (!simulationPaused)
+        {
+            // Simulation updates would happen here
+        }
+    }
+
+    // Methods for controlling robot from UI
+    public void SendVelocityCommand(float linear, float angular)
+    {
+        // Send velocity command to robot
+        Debug.Log($"Sending velocity command: linear={linear}, angular={angular}");
+
+        // In a real implementation, you would publish this to /cmd_vel
+    }
+
+    public void SendJointPositionCommand(string jointName, float position)
+    {
+        // Send joint position command
+        Debug.Log($"Sending joint command: {jointName} = {position}");
+
+        // In a real implementation, you would publish this to the appropriate joint controller
+    }
+
+    // Toggle panel visibility
+    public void ToggleJointControlPanel()
+    {
+        if (jointControlPanel != null)
+            jointControlPanel.SetActive(!jointControlPanel.activeSelf);
+    }
+
+    public void ToggleSensorVisualizationPanel()
+    {
+        if (sensorVisualizationPanel != null)
+            sensorVisualizationPanel.SetActive(!sensorVisualizationPanel.activeSelf);
+    }
+
+    public void ToggleRobotControlPanel()
+    {
+        if (robotControlPanel != null)
+            robotControlPanel.SetActive(!robotControlPanel.activeSelf);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Exercises and Checkpoints
+
+### Exercise 1: Unity Environment Design
+
+**Scenario:** You need to create a Unity environment for testing a humanoid robot's navigation and manipulation capabilities. The environment should include:
+
+- A realistic indoor setting with furniture and obstacles
+- Interactive objects that the robot can manipulate
+- Sensor visualization capabilities
+- Human-robot interaction interfaces
+
+**Task:** Design and implement the Unity scene with:
+- Appropriate lighting and materials for realistic rendering
+- Physics colliders for proper interaction
+- Sensor visualization systems
+- User interface for robot control and monitoring
+
+**Success Criteria:**
+- [ ] Realistic environment with appropriate scale
+- [ ] Functional physics interactions
+- [ ] Clear sensor data visualization
+- [ ] Intuitive user interface
+
+### Exercise 2: ROS-Unity Integration
+
+**Objective:** Implement bidirectional communication between ROS 2 and Unity for robot state visualization.
+
+**Task:** Create a Unity application that:
+- Subscribes to ROS 2 topics for joint states and sensor data
+- Visualizes the robot's current pose and sensor readings
+- Publishes commands to ROS 2 for robot control
+- Handles connection management and error recovery
+
+**Success Criteria:**
+- [ ] Successful ROS-Unity communication
+- [ ] Real-time robot state visualization
+- [ ] Command publishing functionality
+- [ ] Robust error handling
+
+### Self-Assessment Questions
+
+1. **Question:** What are the main advantages of using Unity for robotics visualization?
+   **Answer:** Unity provides high-quality graphics rendering, sophisticated interaction systems, VR/AR support, extensive asset ecosystem, and real-time visualization capabilities that enhance robot development and human-robot interaction.
+
+2. **Question:** How does Unity-ROS integration enable advanced robotics applications?
+   **Answer:** Unity-ROS integration enables bidirectional communication, allowing Unity to visualize real robot data while sending commands back to the robot, creating immersive environments for testing, training, and human-robot interaction.
+
+3. **Question:** What are important considerations for Unity performance in robotics applications?
+   **Answer:** Important considerations include maintaining high frame rates for real-time interaction, efficient rendering techniques, proper resource management, optimized physics simulation, and network communication efficiency.
+
+## Summary and Key Takeaways
+
+### Key Concepts Recap
+
+- **Unity Robotics**: High-quality visualization and interaction platform for robotics applications
+- **ROS Integration**: Bidirectional communication between Unity and ROS 2 systems
+- **Visualization Techniques**: Advanced rendering for robot state, sensor data, and environment
+- **Interaction Systems**: Human-robot interfaces and control systems
+- **Performance Optimization**: Balancing visual quality with real-time performance
+
+### Practical Applications
+
+- **Training Environments**: Photorealistic simulation for AI development
+- **Human-Robot Interaction**: Intuitive interfaces for robot control and monitoring
+- **Data Visualization**: Real-time display of sensor data and robot metrics
+- **Remote Operation**: VR/AR interfaces for teleoperation
+
+### Next Steps
+
+- **Module Progression:** Next chapter covers [ROS 2 Integration](./ros2-integration.mdx) for connecting simulation systems
+- **Further Reading:** Explore Unity ML-Agents for robot learning applications
+- **Practice Opportunities:** Implement Unity visualization for your robot platform
+
+### Common Mistakes and Troubleshooting
+
+- **Mistake 1:** Poor performance due to heavy graphics → **Solution:** Optimize rendering and use LOD systems
+- **Mistake 2:** Unreliable ROS communication → **Solution:** Implement proper error handling and connection management
+- **Mistake 3:** Coordinate system mismatches → **Solution:** Carefully map between Unity and ROS coordinate systems
+
+### References and Resources
+
+- [Unity Robotics Hub](https://github.com/Unity-Technologies/Unity-Robotics-Hub)
+- [Unity-ROS Bridge Documentation](https://github.com/Unity-Technologies/ROS-TCP-Connector)
+- [Unity ML-Agents Toolkit](https://github.com/Unity-Technologies/ml-agents)
+- [Unity Perception Package](https://github.com/Unity-Technologies/com.unity.perception)

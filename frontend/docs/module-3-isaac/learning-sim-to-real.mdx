@@ -1,0 +1,753 @@
+# Learning Systems and Sim-to-Real Transfer
+
+## Overview
+
+Machine learning and sim-to-real transfer are critical components of modern humanoid robotics. The ability to learn from simulation and transfer that knowledge to real hardware enables rapid development and deployment of complex behaviors. This chapter explores NVIDIA Isaac's learning capabilities, domain randomization techniques, and methods for bridging the reality gap between simulation and real-world performance.
+
+## Machine Learning in Humanoid Robotics
+
+### Learning Paradigms for Humanoid Robots
+
+Humanoid robots require specialized learning approaches due to their complex dynamics and safety requirements:
+
+#### Reinforcement Learning
+- **Safe Exploration**: Learning without damaging the physical robot
+- **Sample Efficiency**: Minimizing required training time
+- **Transfer Learning**: Applying simulation knowledge to reality
+- **Multi-Task Learning**: Learning multiple behaviors simultaneously
+
+#### Imitation Learning
+- **Demonstration Learning**: Learning from human demonstrations
+- **Behavior Cloning**: Imitating expert policies
+- **Adversarial Imitation**: Learning from observations of desired behavior
+
+#### Learning from Human Interaction
+- **Interactive Learning**: Learning from human feedback
+- **Social Learning**: Learning through observation of human behavior
+- **Preference Learning**: Learning human preferences and goals
+
+## NVIDIA Isaac Learning Framework
+
+### Isaac Gym and Isaac Sim
+
+NVIDIA Isaac provides powerful simulation environments optimized for learning:
+
+```python
+# Example Isaac Gym environment for humanoid learning
+import torch
+import isaacgym
+from isaacgym import gymapi, gymtorch
+from isaacgym.torch_utils import *
+import torch.nn as nn
+import torch.optim as optim
+
+class HumanoidLocomotionEnv:
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.device = cfg['device']
+
+        # Initialize Isaac Gym
+        self.gym = gymapi.acquire_gym()
+        self.sim = self.gym.create_sim(
+            device_id=0,
+            gpu_id=0,
+            type=gymapi.SIM_PHYSX,
+            params={}
+        )
+
+        # Create ground plane
+        plane_params = gymapi.PlaneParams()
+        plane_params.normal = gymapi.Vec3(0.0, 0.0, 1.0)
+        self.gym.add_ground(self.sim, plane_params)
+
+        # Load humanoid asset
+        asset_root = cfg['asset_root']
+        asset_file = cfg['asset_file']
+        self.humanoid_asset = self.gym.load_asset(
+            self.sim, asset_root, asset_file, {}
+        )
+
+        self._create_envs()
+        self._setup_tensors()
+
+    def _create_envs(self):
+        """Create multiple environments for parallel training."""
+        num_envs = self.cfg['num_envs']
+        spacing = self.cfg['env_spacing']
+
+        env_lower = gymapi.Vec3(-spacing, -spacing, 0.0)
+        env_upper = gymapi.Vec3(spacing, spacing, spacing)
+
+        self.envs = []
+        for i in range(num_envs):
+            env = self.gym.create_env(
+                self.sim, env_lower, env_upper, 1
+            )
+
+            # Add humanoid to environment
+            pose = gymapi.Transform()
+            pose.p = gymapi.Vec3(0.0, 0.0, 1.0)
+            pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
+
+            self.gym.create_actor(
+                env, self.humanoid_asset, pose, "humanoid", i, 1, 1
+            )
+
+            self.envs.append(env)
+
+    def _setup_tensors(self):
+        """Setup PyTorch tensors for GPU-accelerated learning."""
+        self.obs_buf = torch.zeros(
+            (self.cfg['num_envs'], self.cfg['obs_size']),
+            device=self.device, dtype=torch.float
+        )
+        self.rew_buf = torch.zeros(
+            self.cfg['num_envs'], device=self.device, dtype=torch.float
+        )
+        self.reset_buf = torch.zeros(
+            self.cfg['num_envs'], device=self.device, dtype=torch.long
+        )
+
+    def step(self, actions):
+        """Execute one simulation step with given actions."""
+        # Apply actions to humanoid joints
+        self._apply_actions(actions)
+
+        # Step simulation
+        self.gym.simulate(self.sim)
+        self.gym.fetch_results(self.sim, True)
+
+        # Update tensors
+        self._update_tensors()
+
+        # Calculate observations and rewards
+        obs = self._compute_observations()
+        rew = self._compute_rewards()
+        reset = self._compute_resets()
+
+        return obs, rew, reset, {}
+
+    def reset(self):
+        """Reset all environments."""
+        self.reset_buf[:] = 1
+        return self._compute_observations()
+```
+
+### Domain Randomization
+
+Domain randomization helps bridge the sim-to-real gap by training policies in varied simulation conditions:
+
+```python
+class DomainRandomizer:
+    def __init__(self, env):
+        self.env = env
+        self.randomization_params = {
+            'mass_range': [0.8, 1.2],  # 80% to 120% of nominal mass
+            'friction_range': [0.5, 1.5],  # Friction coefficient range
+            'com_offset_range': [-0.05, 0.05],  # COM offset in meters
+            'actuator_delay_range': [0.0, 0.02],  # Actuator delay in seconds
+            'sensor_noise_range': [0.0, 0.01],  # Sensor noise standard deviation
+        }
+
+    def randomize_environment(self):
+        """Randomize physical parameters for domain randomization."""
+        for env_idx in range(self.env.num_envs):
+            # Randomize mass
+            mass_multiplier = np.random.uniform(
+                self.randomization_params['mass_range'][0],
+                self.randomization_params['mass_range'][1]
+            )
+            self._randomize_mass(env_idx, mass_multiplier)
+
+            # Randomize friction
+            friction = np.random.uniform(
+                self.randomization_params['friction_range'][0],
+                self.randomization_params['friction_range'][1]
+            )
+            self._randomize_friction(env_idx, friction)
+
+            # Randomize center of mass
+            com_offset = np.random.uniform(
+                self.randomization_params['com_offset_range'][0],
+                self.randomization_params['com_offset_range'][1],
+                size=3
+            )
+            self._randomize_com(env_idx, com_offset)
+
+            # Randomize other parameters...
+
+    def _randomize_mass(self, env_idx, multiplier):
+        """Apply mass multiplier to robot links."""
+        actor_handle = self.env.gym.get_actor_handle(
+            self.env.envs[env_idx], 0
+        )
+
+        # Get body names and modify masses
+        num_bodies = self.env.gym.get_actor_rigid_body_count(
+            self.env.envs[env_idx], actor_handle
+        )
+
+        for body_idx in range(num_bodies):
+            body_name = self.env.gym.get_rigid_body_name(
+                self.env.envs[env_idx], actor_handle, body_idx
+            )
+
+            # Get current mass properties
+            mass_props = self.env.gym.get_rigid_body_mass_properties(
+                self.env.envs[env_idx], actor_handle, body_idx
+            )
+
+            # Apply multiplier
+            mass_props.mass *= multiplier
+            mass_props.com.x *= multiplier  # Adjust center of mass
+            mass_props.com.y *= multiplier
+            mass_props.com.z *= multiplier
+
+            # Set new mass properties
+            self.env.gym.set_rigid_body_mass_properties(
+                self.env.envs[env_idx], actor_handle, body_idx, mass_props
+            )
+```
+
+## Deep Learning Integration with Isaac
+
+### Isaac ROS DNN Inference
+
+```python
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image
+from std_msgs.msg import Float32MultiArray
+from isaac_ros_tensor_list_interfaces.msg import TensorList
+import torch
+import torch_tensorrt
+
+class IsaacLearningNode(Node):
+    def __init__(self):
+        super().__init__('isaac_learning_node')
+
+        # Load pre-trained model optimized for TensorRT
+        self.model = self.load_optimized_model()
+
+        # Subscribers for sensor data
+        self.image_sub = self.create_subscription(
+            Image, '/camera/rgb/image_raw', self.image_callback, 10
+        )
+
+        # Publishers for learned outputs
+        self.policy_pub = self.create_publisher(
+            Float32MultiArray, '/learned_policy', 10
+        )
+
+        self.get_logger().info('Isaac Learning Node initialized')
+
+    def load_optimized_model(self):
+        """Load and optimize model for inference."""
+        # Load PyTorch model
+        model = torch.jit.load('path/to/trained_policy.pt')
+
+        # Optimize with TensorRT
+        optimized_model = torch_tensorrt.compile(
+            model,
+            inputs=[torch_tensorrt.Input(
+                min_shape=[1, 3, 224, 224],
+                opt_shape=[8, 3, 224, 224],
+                max_shape=[16, 3, 224, 224]
+            )],
+            enabled_precisions={torch.float, torch.half}
+        )
+
+        return optimized_model
+
+    def image_callback(self, msg):
+        """Process image and generate learned policy output."""
+        # Convert ROS image to tensor
+        image_tensor = self.ros_image_to_tensor(msg)
+
+        # Run inference
+        with torch.no_grad():
+            policy_output = self.model(image_tensor)
+
+        # Publish policy
+        policy_msg = Float32MultiArray()
+        policy_msg.data = policy_output.cpu().numpy().flatten().tolist()
+        self.policy_pub.publish(policy_msg)
+```
+
+## Sim-to-Real Transfer Techniques
+
+### System Identification and Model Adaptation
+
+```python
+class SimToRealAdapter:
+    def __init__(self):
+        self.sim_model = None  # Simulation model
+        self.real_model = None  # Real robot model
+        self.adaptation_params = {}
+
+    def identify_system_differences(self):
+        """Identify differences between sim and real systems."""
+        # Collect data from both sim and real
+        sim_data = self.collect_simulation_data()
+        real_data = self.collect_real_robot_data()
+
+        # Compare system responses
+        differences = self.compare_system_responses(sim_data, real_data)
+
+        # Extract adaptation parameters
+        self.adaptation_params = self.extract_adaptation_params(differences)
+
+    def adapt_policy(self, sim_policy):
+        """Adapt simulation policy for real robot."""
+        # Apply domain adaptation
+        adapted_policy = self.domain_adaptation(sim_policy)
+
+        # Fine-tune with real robot data
+        fine_tuned_policy = self.fine_tune_with_real_data(
+            adapted_policy, self.adaptation_params
+        )
+
+        return fine_tuned_policy
+
+    def domain_adaptation(self, policy):
+        """Apply domain adaptation techniques."""
+        # Use techniques like:
+        # - Domain adversarial training
+        # - Feature space alignment
+        # - Style transfer
+        pass
+```
+
+### Reality Gap Mitigation
+
+```python
+class RealityGapMitigator:
+    def __init__(self):
+        self.sim_noise_model = self.create_sim_noise_model()
+        self.systematic_errors = {}
+
+    def create_sim_noise_model(self):
+        """Create noise model to make simulation more realistic."""
+        return {
+            'sensor_noise': self.configure_sensor_noise(),
+            'actuator_delay': self.configure_actuator_delay(),
+            'model_inaccuracies': self.configure_model_inaccuracies()
+        }
+
+    def configure_sensor_noise(self):
+        """Configure realistic sensor noise in simulation."""
+        return {
+            'imu': {
+                'gyro_noise_density': 0.0001,  # rad/s/sqrt(Hz)
+                'gyro_random_walk': 0.0001,    # rad/s/sqrt(Hz)
+                'accel_noise_density': 0.01,   # m/s^2/sqrt(Hz)
+                'accel_random_walk': 0.01      # m/s^2/sqrt(Hz)
+            },
+            'camera': {
+                'image_noise': 0.02,  # Noise level
+                'distortion': True,   # Include distortion
+                'delay': 0.01         # Image processing delay
+            }
+        }
+
+    def configure_actuator_delay(self):
+        """Add realistic actuator delays in simulation."""
+        return {
+            'min_delay': 0.01,  # 10ms minimum delay
+            'max_delay': 0.05,  # 50ms maximum delay
+            'jitter': 0.005     # 5ms jitter
+        }
+
+    def add_realistic_effects(self):
+        """Add realistic effects to simulation."""
+        # Add sensor delays
+        self.add_sensor_delays()
+
+        # Add actuator dynamics
+        self.add_actuator_dynamics()
+
+        # Add environmental effects
+        self.add_ground_interaction_effects()
+
+    def add_sensor_delays(self):
+        """Add realistic sensor delays."""
+        # Implement sensor delay models
+        pass
+
+    def add_actuator_dynamics(self):
+        """Model actuator dynamics."""
+        # Include motor dynamics, gear backlash, etc.
+        pass
+```
+
+## Learning Algorithms for Humanoid Control
+
+### Deep Reinforcement Learning for Locomotion
+
+```python
+import torch.nn as nn
+import torch.optim as optim
+from torch.distributions import Normal
+
+class HumanoidPPOAgent:
+    def __init__(self, state_dim, action_dim, lr=3e-4):
+        self.actor = self.build_actor(state_dim, action_dim)
+        self.critic = self.build_critic(state_dim)
+
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=lr)
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.actor.to(self.device)
+        self.critic.to(self.device)
+
+    def build_actor(self, state_dim, action_dim):
+        """Build actor network for policy."""
+        return nn.Sequential(
+            nn.Linear(state_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, action_dim * 2)  # Mean and std for Gaussian
+        )
+
+    def build_critic(self, state_dim):
+        """Build critic network for value estimation."""
+        return nn.Sequential(
+            nn.Linear(state_dim, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+
+    def select_action(self, state):
+        """Select action using current policy."""
+        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+
+        action_params = self.actor(state)
+        mean = action_params[:, :action_params.shape[1]//2]
+        std = torch.exp(action_params[:, action_params.shape[1]//2:])
+
+        dist = Normal(mean, std)
+        action = dist.sample()
+        log_prob = dist.log_prob(action).sum(dim=-1)
+
+        return action.cpu().data.numpy().flatten(), log_prob.cpu().data.numpy()
+
+    def evaluate(self, state, action):
+        """Evaluate state-action pair."""
+        state = torch.FloatTensor(state).to(self.device)
+        action = torch.FloatTensor(action).to(self.device)
+
+        value = self.critic(state)
+
+        action_params = self.actor(state)
+        mean = action_params[:, :action_params.shape[1]//2]
+        std = torch.exp(action_params[:, action_params.shape[1]//2:])
+
+        dist = Normal(mean, std)
+        log_prob = dist.log_prob(action).sum(dim=-1)
+        entropy = dist.entropy().sum(dim=-1)
+
+        return log_prob, entropy, value
+```
+
+### Curriculum Learning for Complex Behaviors
+
+```python
+class CurriculumLearning:
+    def __init__(self):
+        self.current_stage = 0
+        self.stages = [
+            {'name': 'balance_still', 'difficulty': 0.1},
+            {'name': 'simple_stepping', 'difficulty': 0.3},
+            {'name': 'forward_walking', 'difficulty': 0.5},
+            {'name': 'turning', 'difficulty': 0.7},
+            {'name': 'obstacle_avoidance', 'difficulty': 0.9},
+            {'name': 'complex_navigation', 'difficulty': 1.0}
+        ]
+
+    def advance_curriculum(self, performance):
+        """Advance curriculum based on performance."""
+        current_stage = self.stages[self.current_stage]
+
+        if performance > current_stage['difficulty'] * 0.8:
+            if self.current_stage < len(self.stages) - 1:
+                self.current_stage += 1
+                self.get_logger().info(
+                    f'Advanced to curriculum stage: {self.stages[self.current_stage]["name"]}'
+                )
+
+    def get_current_task(self):
+        """Get the current learning task based on curriculum."""
+        return self.stages[self.current_stage]
+
+    def modify_environment(self, env):
+        """Modify environment difficulty based on curriculum."""
+        current_task = self.get_current_task()
+
+        if current_task['name'] == 'balance_still':
+            # Minimal environment complexity
+            env.set_support_surface_complexity(0.1)
+            env.set_disturbance_frequency(0.1)
+        elif current_task['name'] == 'forward_walking':
+            # Add simple forward movement
+            env.set_target_velocity([0.3, 0.0, 0.0])
+        elif current_task['name'] == 'obstacle_avoidance':
+            # Add obstacles
+            env.add_dynamic_obstacles()
+        # ... other stages
+```
+
+## Transfer Learning and Fine-tuning
+
+### Pre-trained Model Integration
+
+```python
+class TransferLearningFramework:
+    def __init__(self):
+        self.pretrained_models = {}
+        self.fine_tuning_config = {}
+
+    def load_pretrained_model(self, model_name, model_path):
+        """Load a pre-trained model for transfer learning."""
+        model = torch.load(model_path)
+        self.pretrained_models[model_name] = model
+
+        # Freeze early layers for transfer
+        self.freeze_early_layers(model_name)
+
+    def freeze_early_layers(self, model_name):
+        """Freeze early layers during transfer learning."""
+        model = self.pretrained_models[model_name]
+
+        # Freeze all layers except the last few
+        for name, param in model.named_parameters():
+            if 'fc' not in name and 'last' not in name:
+                param.requires_grad = False
+
+    def fine_tune_model(self, model_name, new_data_loader, epochs=10):
+        """Fine-tune pre-trained model on new data."""
+        model = self.pretrained_models[model_name]
+        optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()))
+
+        model.train()
+        for epoch in range(epochs):
+            for batch_idx, (data, target) in enumerate(new_data_loader):
+                optimizer.zero_grad()
+                output = model(data)
+                loss = F.mse_loss(output, target)
+                loss.backward()
+                optimizer.step()
+
+    def adapt_for_robot(self, model_name, robot_config):
+        """Adapt model for specific robot configuration."""
+        # Adjust for robot-specific parameters
+        model = self.pretrained_models[model_name]
+
+        # Modify for robot's joint limits, DOF, etc.
+        adapted_model = self.modify_for_robot_dynamics(model, robot_config)
+
+        return adapted_model
+```
+
+## Safe Learning and Exploration
+
+### Safety-Aware Learning
+
+```python
+class SafeLearningFramework:
+    def __init__(self):
+        self.safety_constraints = []
+        self.backup_controller = None
+        self.safety_thresholds = {}
+
+    def add_safety_constraint(self, constraint_func, threshold):
+        """Add a safety constraint to the learning framework."""
+        self.safety_constraints.append({
+            'func': constraint_func,
+            'threshold': threshold
+        })
+
+    def check_safety(self, state):
+        """Check if current state is safe for learning."""
+        for constraint in self.safety_constraints:
+            value = constraint['func'](state)
+            if value > constraint['threshold']:
+                return False
+        return True
+
+    def safe_exploration(self, state, action):
+        """Perform safe exploration with safety checks."""
+        # Check if action is safe
+        predicted_state = self.predict_state(state, action)
+
+        if self.check_safety(predicted_state):
+            return action
+        else:
+            # Use backup controller or safe action
+            safe_action = self.backup_controller.get_safe_action(state)
+            return safe_action
+
+    def emergency_stop(self):
+        """Emergency stop if safety is compromised."""
+        # Implement emergency stopping procedure
+        self.stop_robot()
+        self.log_safety_violation()
+
+    def predict_state(self, state, action):
+        """Predict next state given current state and action."""
+        # Use dynamics model to predict next state
+        pass
+```
+
+## Learning from Demonstration
+
+### Imitation Learning Implementation
+
+```python
+class ImitationLearning:
+    def __init__(self):
+        self.expert_demonstrations = []
+        self.behavioral_cloning_model = None
+
+    def collect_demonstration(self, expert_policy, env):
+        """Collect expert demonstrations."""
+        demo_trajectory = []
+
+        obs = env.reset()
+        done = False
+
+        while not done:
+            action = expert_policy(obs)
+            next_obs, reward, done, info = env.step(action)
+
+            demo_trajectory.append({
+                'state': obs,
+                'action': action,
+                'next_state': next_obs,
+                'reward': reward
+            })
+
+            obs = next_obs
+
+        self.expert_demonstrations.append(demo_trajectory)
+
+    def train_behavioral_cloning(self):
+        """Train behavioral cloning model."""
+        # Prepare dataset
+        states = []
+        actions = []
+
+        for trajectory in self.expert_demonstrations:
+            for step in trajectory:
+                states.append(step['state'])
+                actions.append(step['action'])
+
+        states = torch.FloatTensor(states)
+        actions = torch.FloatTensor(actions)
+
+        # Train model to imitate expert
+        self.behavioral_cloning_model = self.train_model(states, actions)
+
+    def train_model(self, states, actions):
+        """Train the imitation learning model."""
+        model = nn.Sequential(
+            nn.Linear(states.shape[1], 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, actions.shape[1])
+        )
+
+        optimizer = optim.Adam(model.parameters())
+
+        for epoch in range(1000):
+            optimizer.zero_grad()
+            pred_actions = model(states)
+            loss = F.mse_loss(pred_actions, actions)
+            loss.backward()
+            optimizer.step()
+
+        return model
+```
+
+## Evaluation and Validation
+
+### Learning Performance Metrics
+
+```python
+class LearningEvaluator:
+    def __init__(self):
+        self.metrics = {
+            'success_rate': 0.0,
+            'learning_efficiency': 0.0,
+            'transfer_success': 0.0,
+            'safety_violations': 0
+        }
+
+    def evaluate_policy(self, policy, test_envs):
+        """Evaluate policy performance."""
+        total_success = 0
+        total_attempts = 0
+
+        for env in test_envs:
+            success = self.test_policy_in_env(policy, env)
+            if success:
+                total_success += 1
+            total_attempts += 1
+
+        self.metrics['success_rate'] = total_success / max(total_attempts, 1)
+
+    def evaluate_transfer(self, sim_policy, real_robot):
+        """Evaluate sim-to-real transfer."""
+        # Test policy on real robot
+        success_count = 0
+        total_trials = 10
+
+        for trial in range(total_trials):
+            success = self.test_on_real_robot(sim_policy, real_robot)
+            if success:
+                success_count += 1
+
+        self.metrics['transfer_success'] = success_count / total_trials
+
+    def calculate_learning_efficiency(self, learning_curve):
+        """Calculate learning efficiency from learning curve."""
+        # Calculate how quickly policy improved
+        improvement_rate = self.calculate_improvement_rate(learning_curve)
+        sample_efficiency = self.calculate_sample_efficiency(learning_curve)
+
+        self.metrics['learning_efficiency'] = (improvement_rate + sample_efficiency) / 2
+
+    def generate_evaluation_report(self):
+        """Generate comprehensive evaluation report."""
+        report = f"""
+        Learning Evaluation Report
+        =========================
+        Success Rate: {self.metrics['success_rate']:.2f}
+        Learning Efficiency: {self.metrics['learning_efficiency']:.2f}
+        Transfer Success: {self.metrics['transfer_success']:.2f}
+        Safety Violations: {self.metrics['safety_violations']}
+        """
+
+        return report
+```
+
+## Best Practices for Learning Systems
+
+1. **Safety-First Design**: Always prioritize safety in learning algorithms
+2. **Gradual Complexity**: Use curriculum learning to gradually increase difficulty
+3. **Domain Randomization**: Use extensive domain randomization in simulation
+4. **Real-World Validation**: Regularly validate on real hardware
+5. **Continuous Learning**: Implement lifelong learning capabilities
+6. **Robust Evaluation**: Use comprehensive metrics for evaluation
+7. **Model Interpretability**: Maintain interpretability for debugging
+8. **Efficient Sampling**: Optimize for sample efficiency
+
+Learning systems and sim-to-real transfer are essential for creating capable humanoid robots that can adapt to real-world conditions while leveraging the safety and efficiency of simulation-based training.

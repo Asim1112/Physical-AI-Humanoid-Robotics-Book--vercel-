@@ -1,0 +1,524 @@
+# Bipedal Navigation for Humanoid Robots
+
+## Overview
+
+Bipedal navigation presents unique challenges compared to wheeled or tracked robot navigation. Humanoid robots must maintain dynamic balance while navigating, plan footsteps carefully, and coordinate complex multi-joint movements. This chapter explores specialized navigation algorithms and techniques designed specifically for bipedal locomotion using NVIDIA Isaac platform capabilities.
+
+## Bipedal Navigation Challenges
+
+Unlike wheeled robots, humanoid robots face several unique navigation challenges:
+
+### Balance and Stability
+- **Dynamic Balance**: Maintaining center of mass within support polygon
+- **Step Planning**: Carefully planning foot placements for stability
+- **Gait Transitions**: Smoothly transitioning between different walking gaits
+- **Recovery Systems**: Emergency balance recovery when stability is compromised
+
+### Terrain Adaptation
+- **Uneven Surfaces**: Navigating stairs, slopes, and irregular terrain
+- **Step Height Variations**: Adapting to different step heights and obstacles
+- **Surface Compliance**: Handling soft, slippery, or unstable surfaces
+- **Multi-contact Planning**: Planning for hand support when needed
+
+### Computational Complexity
+- **High DOF Control**: Coordinating 20+ joints for stable locomotion
+- **Real-time Requirements**: Maintaining balance at 100+ Hz control rates
+- **Multi-objective Optimization**: Balancing speed, stability, and energy efficiency
+
+## Navigation Architecture for Bipedal Robots
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   GLOBAL        │    │   LOCAL         │    │   FOOTSTEP      │
+│   PLANNING      │───►│   PLANNING      │───►│   PLANNING      │
+│                 │    │                 │    │                 │
+│ • Topological   │    │ • Collision     │    │ • Foot placement│
+│   Maps          │    │   Avoidance     │    │ • Swing planning│
+│ • Path Finding  │    │ • Dynamic       │    │ • Balance       │
+│ • Waypoint      │    │   Obstacles     │    │   Constraints   │
+│   Generation    │    │ • Velocity      │    │ • Gait Patterns │
+└─────────────────┘    │   Profiling     │    └─────────────────┘
+                       └─────────────────┘              │
+                              │                         ▼
+                              ▼                  ┌─────────────────┐
+                       ┌─────────────────┐       │   MOTION        │
+                       │   TRAJECTORY    │──────►│   GENERATION    │
+                       │   GENERATION    │       │                 │
+                       │                 │       │ • Joint         │
+                       │ • Velocity      │       │   Trajectories  │
+                       │   Profiles      │       │ • Balance       │
+                       │ • Timing        │       │   Control       │
+                       │   Constraints   │       │ • Swing Control │
+                       │ • Smoothness    │       │ • Landing       │
+                       │   Optimization  │       │   Control       │
+                       └─────────────────┘       └─────────────────┘
+```
+
+## Global Path Planning for Bipedal Robots
+
+### Topological Navigation
+
+Bipedal robots often use topological maps that represent navigable locations and connections:
+
+```python
+class TopologicalMap:
+    def __init__(self):
+        self.nodes = {}  # Waypoints with stability information
+        self.edges = {}  # Navigable connections
+        self.stability_map = {}  # Stability scores for locations
+
+    def add_waypoint(self, name, pose, stability_score):
+        """Add a stable waypoint to the topological map."""
+        self.nodes[name] = {
+            'pose': pose,
+            'stability_score': stability_score,
+            'footstep_constraints': self.calculate_footstep_constraints(pose)
+        }
+
+    def find_stable_path(self, start, goal):
+        """Find path through most stable waypoints."""
+        # Use A* with stability as heuristic
+        def stability_heuristic(node):
+            return self.nodes[node]['stability_score']
+
+        return self.astar_with_stability(start, goal, stability_heuristic)
+```
+
+### Bipedal-Specific Path Planning
+
+```python
+import numpy as np
+from scipy.spatial import KDTree
+
+class BipedalPathPlanner:
+    def __init__(self):
+        self.occupancy_grid = None
+        self.stability_map = None
+        self.step_constraints = {'max_step_width': 0.3, 'max_step_height': 0.15}
+
+    def plan_stable_path(self, start_pose, goal_pose, robot_radius=0.3):
+        """Plan path considering bipedal stability constraints."""
+        # Inflate obstacles based on robot's footstep requirements
+        inflated_grid = self.inflate_for_footsteps(robot_radius)
+
+        # Plan path using RRT* or similar algorithm
+        path = self.rrt_star_with_stability(start_pose, goal_pose, inflated_grid)
+
+        # Smooth path for bipedal locomotion
+        smoothed_path = self.smooth_bipedal_path(path)
+
+        return smoothed_path
+
+    def inflate_for_footsteps(self, robot_radius):
+        """Inflate obstacles considering footstep placement requirements."""
+        # Create larger safety margin for bipedal navigation
+        safety_margin = robot_radius + self.step_constraints['max_step_width']
+        return self.inflate_occupancy_grid(safety_margin)
+
+    def smooth_bipedal_path(self, path):
+        """Smooth path for natural bipedal movement."""
+        # Apply smoothing that maintains footstep feasibility
+        smoothed = []
+        for i in range(len(path)):
+            if i == 0 or i == len(path) - 1:
+                smoothed.append(path[i])
+            else:
+                # Consider stability of intermediate points
+                smoothed_point = self.optimize_for_stability(path[i-1], path[i], path[i+1])
+                smoothed.append(smoothed_point)
+        return np.array(smoothed)
+```
+
+## Local Path Planning and Obstacle Avoidance
+
+### Dynamic Window Approach for Bipedal Robots
+
+```python
+class BipedalDWA:
+    def __init__(self):
+        self.max_vel = 0.5  # Conservative for stability
+        self.max_acc = 0.5
+        self.dt = 0.1
+        self.prediction_time = 2.0
+        self.balance_threshold = 0.1  # Maximum CoM deviation
+
+    def calculate_velocities(self, robot_state, goal, obstacles):
+        """Calculate safe velocities considering balance constraints."""
+        # Generate velocity samples
+        v_samples = np.linspace(0, self.max_vel, 10)
+        w_samples = np.linspace(-0.5, 0.5, 10)
+
+        best_score = -float('inf')
+        best_vel = (0, 0)
+
+        for v in v_samples:
+            for w in w_samples:
+                # Simulate trajectory
+                trajectory = self.predict_trajectory(robot_state, v, w)
+
+                # Evaluate for safety, goal, and balance
+                score = self.evaluate_trajectory(trajectory, goal, obstacles)
+
+                if score > best_score:
+                    best_score = score
+                    best_vel = (v, w)
+
+        return best_vel
+
+    def evaluate_trajectory(self, trajectory, goal, obstacles):
+        """Evaluate trajectory considering balance and safety."""
+        # Safety score (distance to obstacles)
+        safety_score = self.calculate_safety_score(trajectory, obstacles)
+
+        # Goal score (closeness to target)
+        goal_score = self.calculate_goal_score(trajectory, goal)
+
+        # Balance score (stability during movement)
+        balance_score = self.calculate_balance_score(trajectory)
+
+        # Weighted combination
+        total_score = (0.3 * safety_score +
+                      0.4 * goal_score +
+                      0.3 * balance_score)
+
+        return total_score
+
+    def calculate_balance_score(self, trajectory):
+        """Calculate score based on balance during trajectory."""
+        balance_score = 0
+        for pose in trajectory:
+            # Calculate center of mass position relative to feet
+            com_pos = self.calculate_com_position(pose)
+            support_polygon = self.calculate_support_polygon(pose)
+
+            # Distance to support polygon boundary
+            stability_margin = self.distance_to_support_boundary(com_pos, support_polygon)
+
+            # Higher score for better stability
+            balance_score += max(0, stability_margin - self.balance_threshold)
+
+        return balance_score / len(trajectory) if trajectory else 0
+```
+
+## Footstep Planning
+
+### Stability-Based Footstep Planning
+
+```python
+class FootstepPlanner:
+    def __init__(self):
+        self.step_width = 0.2  # Distance between feet
+        self.step_length = 0.3  # Step length
+        self.max_step_height = 0.15  # Max step over height
+        self.support_polygon_margin = 0.05
+
+    def plan_footsteps(self, path, start_pose, goal_pose):
+        """Plan stable footsteps along the path."""
+        footsteps = []
+
+        # Start with current foot positions
+        left_foot, right_foot = self.get_initial_foot_positions(start_pose)
+        footsteps.append(('left', left_foot))
+        footsteps.append(('right', right_foot))
+
+        # Plan footsteps along path
+        current_left = left_foot
+        current_right = right_foot
+        current_support = 'left'  # Right foot will move next
+
+        for i, path_point in enumerate(path[1:]):
+            # Calculate next foot position based on path direction
+            if current_support == 'left':
+                # Move right foot
+                next_right = self.calculate_next_foot_position(
+                    path_point, current_left, 'right'
+                )
+                footsteps.append(('right', next_right))
+                current_right = next_right
+                current_support = 'right'
+            else:
+                # Move left foot
+                next_left = self.calculate_next_foot_position(
+                    path_point, current_right, 'left'
+                )
+                footsteps.append(('left', next_left))
+                current_left = next_left
+                current_support = 'left'
+
+        return footsteps
+
+    def calculate_next_foot_position(self, target_pos, support_foot, swing_foot):
+        """Calculate optimal next position for swing foot."""
+        # Calculate direction from support foot to target
+        direction = target_pos[:2] - support_foot[:2]
+        direction_norm = np.linalg.norm(direction)
+
+        if direction_norm > 0:
+            direction_unit = direction / direction_norm
+        else:
+            direction_unit = np.array([1, 0])  # Default direction
+
+        # Calculate next foot position
+        step_distance = min(self.step_length, direction_norm)
+        next_pos = support_foot[:2] + direction_unit * step_distance
+
+        # Add lateral offset for stability
+        if swing_foot == 'left':
+            lateral_offset = np.array([-self.step_width/2, 0])
+        else:
+            lateral_offset = np.array([self.step_width/2, 0])
+
+        # Rotate lateral offset based on movement direction
+        rotation_matrix = np.array([
+            [direction_unit[0], -direction_unit[1]],
+            [direction_unit[1], direction_unit[0]]
+        ])
+        lateral_offset = rotation_matrix @ lateral_offset
+
+        final_pos = np.array([next_pos[0] + lateral_offset[0],
+                             next_pos[1] + lateral_offset[1],
+                             target_pos[2]])  # Maintain height
+
+        return final_pos
+```
+
+## Motion Generation for Bipedal Locomotion
+
+### Center of Mass Trajectory Planning
+
+```python
+class CoMTrajectoryGenerator:
+    def __init__(self):
+        self.zmp_reference = 0.0  # Zero Moment Point reference
+        self.com_height = 0.8     # Desired CoM height
+        self.walk_frequency = 1.0 # Walking frequency (Hz)
+
+    def generate_com_trajectory(self, footsteps, dt=0.01):
+        """Generate CoM trajectory from footsteps using ZMP planning."""
+        # Calculate ZMP trajectory from footsteps
+        zmp_trajectory = self.calculate_zmp_from_footsteps(footsteps)
+
+        # Generate CoM trajectory using inverted pendulum model
+        com_trajectory = self.integrate_zmp_to_com(zmp_trajectory, dt)
+
+        return com_trajectory
+
+    def calculate_zmp_from_footsteps(self, footsteps):
+        """Calculate ZMP trajectory from footstep sequence."""
+        zmp_points = []
+
+        for i, (foot, pose) in enumerate(footsteps):
+            # ZMP should be near the center of the support foot
+            zmp_point = self.calculate_zmp_for_foot(foot, pose)
+            zmp_points.append(zmp_point)
+
+        # Interpolate between footsteps for smooth ZMP trajectory
+        zmp_trajectory = self.interpolate_zmp_trajectory(zmp_points)
+
+        return zmp_trajectory
+
+    def integrate_zmp_to_com(self, zmp_trajectory, dt):
+        """Integrate ZMP to generate CoM trajectory using inverted pendulum."""
+        # Inverted pendulum model: CoM acceleration = g/h * (CoM - ZMP)
+        # where g is gravity and h is CoM height
+
+        g = 9.81  # gravity
+        h = self.com_height
+
+        com_trajectory = []
+        com_pos = np.array([0.0, 0.0, self.com_height])  # Start position
+        com_vel = np.array([0.0, 0.0, 0.0])  # Start velocity
+
+        for zmp in zmp_trajectory:
+            # Calculate CoM acceleration
+            com_acc = (g / h) * (com_pos[:2] - zmp)
+            com_acc = np.append(com_acc, 0)  # No vertical acceleration for now
+
+            # Integrate to get velocity and position
+            com_vel += com_acc * dt
+            com_pos += com_vel * dt
+
+            com_trajectory.append(com_pos.copy())
+
+        return np.array(com_trajectory)
+```
+
+### Swing Foot Trajectory Generation
+
+```python
+class SwingFootTrajectory:
+    def __init__(self):
+        self.step_height = 0.1  # Height to lift foot during swing
+        self.swing_duration = 0.5  # Duration of swing phase
+
+    def generate_swing_trajectory(self, start_pos, end_pos, duration=None):
+        """Generate smooth swing trajectory for foot movement."""
+        if duration is None:
+            duration = self.swing_duration
+
+        # Calculate intermediate points
+        mid_point = (start_pos + end_pos) / 2
+        mid_point[2] += self.step_height  # Lift foot at midpoint
+
+        # Generate trajectory using cubic interpolation
+        t = np.linspace(0, duration, int(duration * 100))  # 100 Hz trajectory
+        trajectory = []
+
+        for time_step in t:
+            # Cubic interpolation for smooth motion
+            progress = time_step / duration
+            pos = self.cubic_interpolation(start_pos, mid_point, end_pos, progress)
+            trajectory.append(pos)
+
+        return np.array(trajectory)
+
+    def cubic_interpolation(self, start, mid, end, t):
+        """Cubic interpolation for smooth trajectory generation."""
+        # Use cubic Bezier curve for smooth interpolation
+        # B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+        # For our case: P₀=start, P₁=control point 1, P₂=control point 2, P₃=end
+
+        # Calculate control points for smooth lifting and landing
+        control1 = start + (mid - start) * 0.3
+        control2 = mid + (end - mid) * 0.7
+
+        result = ((1-t)**3) * start + \
+                 3 * ((1-t)**2) * t * control1 + \
+                 3 * (1-t) * (t**2) * control2 + \
+                 (t**3) * end
+
+        return result
+```
+
+## Balance Control Integration
+
+### Whole-Body Balance Control
+
+```python
+class WholeBodyBalanceController:
+    def __init__(self):
+        self.com_controller = self.initialize_com_controller()
+        self.foot_controller = self.initialize_foot_controller()
+        self.arm_controller = self.initialize_arm_controller()
+
+    def calculate_balance_control(self, desired_com, current_state, support_foot):
+        """Calculate whole-body control for balance maintenance."""
+        # Calculate CoM error
+        com_error = desired_com - current_state['com_position']
+
+        # Generate CoM control command
+        com_control = self.com_controller.update(com_error)
+
+        # Calculate foot placement adjustments
+        foot_control = self.calculate_foot_adjustment(
+            current_state, support_foot, com_control
+        )
+
+        # Calculate arm movements for balance
+        arm_control = self.calculate_arm_balance(
+            com_error, current_state['orientation']
+        )
+
+        # Combine all controls
+        control_commands = {
+            'com': com_control,
+            'feet': foot_control,
+            'arms': arm_control
+        }
+
+        return control_commands
+
+    def calculate_foot_adjustment(self, state, support_foot, com_control):
+        """Calculate foot placement adjustments for balance."""
+        # Calculate required foot movement to maintain ZMP
+        required_zmp = self.calculate_required_zmp(com_control)
+        current_zmp = self.calculate_current_zmp(state)
+
+        # Calculate foot adjustment needed
+        foot_adjustment = self.inverse_zmp_to_foot(required_zmp, current_zmp, support_foot)
+
+        return foot_adjustment
+
+    def calculate_arm_balance(self, com_error, orientation):
+        """Calculate arm movements to assist with balance."""
+        # Calculate required arm torques based on CoM error
+        # Arms can provide additional stability by moving in opposite direction
+
+        # Map CoM error to arm movements
+        arm_commands = {
+            'left_arm': self.map_com_error_to_arm(com_error, 'left'),
+            'right_arm': self.map_com_error_to_arm(com_error, 'right')
+        }
+
+        return arm_commands
+```
+
+## NVIDIA Isaac Navigation Integration
+
+### Isaac Navigation Stack Configuration
+
+```yaml
+# Isaac Navigation configuration for bipedal robots
+bt_navigator:
+  ros__parameters:
+    use_sim_time: True
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odom
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    enable_groot_monitoring: True
+    groot_zmq_publisher_port: 1666
+    groot_zmq_server_port: 1667
+    # Bipedal-specific parameters
+    max_linear_speed: 0.3
+    max_angular_speed: 0.3
+    balance_threshold: 0.1
+
+controller_server:
+  ros__parameters:
+    use_sim_time: True
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugin: "goal_checker"
+    controller_plugins: ["FollowPath"]
+
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      time_steps: 50
+      model_dt: 0.05
+      batch_size: 1000
+      vx_std: 0.2
+      vy_std: 0.05
+      wz_std: 0.3
+      vx_max: 0.3  # Conservative for bipedal
+      vx_min: -0.1
+      vy_max: 0.1
+      wz_max: 0.3
+      xy_goal_tolerance: 0.1
+      yaw_goal_tolerance: 0.1
+      motion_model: "DiffDrive"
+      # Bipedal-specific cost parameters
+      balance_cost_weight: 10.0
+      step_cost_weight: 5.0
+      smoothness_cost_weight: 2.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_link
+      use_sim_time: True
+      rolling_window: True
+      width: 6
+      height: 6
+      resolution: 0.05  # Higher resolution for footstep planning
+      robot_radius: 0.3
+      # Bipedal-specific inflation
+      inflation_radius: 0.5
+      cost_scaling_factor: 3.0

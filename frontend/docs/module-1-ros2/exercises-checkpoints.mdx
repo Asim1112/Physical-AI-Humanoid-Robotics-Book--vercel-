@@ -1,0 +1,391 @@
+---
+title: "Module 1 Exercises and Learning Checkpoints"
+description: "Exercises and self-assessment checkpoints for Module 1: Robotic Nervous System (ROS 2)"
+tags: [ros2, exercises, learning, checkpoints, humanoid, robotics]
+sidebar_label: "Exercises and Checkpoints"
+sidebar_position: 7
+keywords: [ros2, exercises, learning, checkpoints, robotics]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# Module 1 Exercises and Learning Checkpoints
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+This chapter provides comprehensive exercises and learning checkpoints for Module 1: Robotic Nervous System (ROS 2). These exercises are designed to reinforce the concepts learned in previous chapters and help you apply them to humanoid robotics scenarios.
+
+The exercises are organized by difficulty level and learning objective, with clear success criteria and expected outcomes. Work through these exercises to solidify your understanding of ROS 2 fundamentals, communication patterns, robot modeling, and system integration.
+
+### Exercise Categories
+
+- **Conceptual Understanding**: Questions that test theoretical knowledge
+- **Implementation Practice**: Hands-on coding exercises
+- **System Integration**: Complex exercises combining multiple concepts
+- **Safety and Best Practices**: Exercises focused on safe and robust robot development
+
+## Chapter 1: Understanding ROS 2 - Exercises
+
+### Exercise 1.1: Conceptual Understanding
+
+**Objective**: Demonstrate understanding of core ROS 2 concepts and architecture.
+
+**Task**: Explain the following concepts in the context of humanoid robotics:
+1. The role of ROS 2 as a "robotic nervous system"
+2. The difference between nodes, topics, services, and actions
+3. Why ROS 2 is essential for humanoid robot development
+
+**Success Criteria**:
+- [ ] Clear explanation of each concept
+- [ ] Specific examples related to humanoid robotics
+- [ ] Understanding of when to use each communication pattern
+
+### Exercise 1.2: Node Architecture Analysis
+
+**Objective**: Analyze the node architecture of a humanoid robot system.
+
+**Scenario**: Consider a humanoid robot with the following capabilities:
+- Walking locomotion
+- Arm manipulation
+- Vision-based perception
+- Voice interaction
+- Balance control
+
+**Task**: Identify at least 8 different nodes that would be needed for this system and explain their roles.
+
+**Success Criteria**:
+- [ ] At least 8 distinct nodes identified
+- [ ] Clear role definition for each node
+- [ ] Understanding of how nodes would communicate
+
+## Chapter 2: Nodes and Topics - Exercises
+
+### Exercise 2.1: Topic Design for Humanoid Robot
+
+**Objective**: Design an appropriate topic structure for humanoid robot sensor and control data.
+
+**Scenario**: You're designing a humanoid robot with:
+- 24 DOF (6 DOF arms × 2, 6 DOF legs × 2, 2 DOF torso, 2 DOF head)
+- Multiple sensors (IMU, cameras, force/torque sensors)
+- Various control interfaces
+
+**Task**: Design a topic naming scheme that follows ROS 2 conventions and makes the system easy to understand and maintain.
+
+**Success Criteria**:
+- [ ] All topics follow consistent naming conventions
+- [ ] Related topics are grouped logically
+- [ ] Names are descriptive and unambiguous
+- [ ] Appropriate QoS settings considered for different topics
+
+### Exercise 2.2: Publisher-Subscriber Implementation
+
+**Objective**: Implement a publisher-subscriber pair for humanoid robot joint control.
+
+**Task**: Create two Python nodes:
+1. A publisher that simulates publishing joint position commands at 50Hz
+2. A subscriber that receives these commands and logs them with timing information
+
+**Requirements**:
+- Use appropriate message types (JointState for positions)
+- Implement proper error handling
+- Include timing validation to ensure messages are received at expected rate
+
+**Success Criteria**:
+- [ ] Publisher and subscriber communicate successfully
+- [ ] Timing requirements met (50Hz communication)
+- [ ] Proper error handling implemented
+- [ ] Clean, well-documented code
+
+### Exercise 2.3: Multi-Topic System
+
+**Objective**: Create a node that subscribes to multiple topics and publishes processed data.
+
+**Task**: Create a "Robot State Monitor" node that:
+- Subscribes to `/joint_states`, `/imu/data`, and `/tf`
+- Combines information from all sources
+- Publishes a fused robot state message
+- Implements appropriate QoS settings for each subscription
+
+**Success Criteria**:
+- [ ] Successfully subscribes to all required topics
+- [ ] Correctly processes and fuses data
+- [ ] Publishes meaningful fused state
+- [ ] Appropriate QoS settings for each topic type
+
+## Chapter 3: Services and Actions - Exercises
+
+### Exercise 3.1: Service vs Action Decision Matrix
+
+**Objective**: Determine the appropriate communication pattern for different humanoid robot operations.
+
+**Scenario**: You're designing a humanoid robot control system with these operations:
+1. Query current battery level
+2. Move robot to a specific location
+3. Calibrate joint encoders
+4. Request robot to play a sound
+5. Perform a complex manipulation task
+6. Get current joint positions
+
+**Task**: For each operation, decide whether to use a topic, service, or action, and justify your choice.
+
+**Success Criteria**:
+- [ ] Correct communication pattern chosen for each operation
+- [ ] Clear justification based on communication requirements
+- [ ] Consideration of timing, feedback, and cancellation needs
+
+### Exercise 3.2: Service Implementation
+
+**Objective**: Implement a service for humanoid robot control.
+
+**Task**: Create a service that allows external systems to request the humanoid robot to perform a simple behavior (e.g., wave arms).
+
+**Requirements**:
+- Define a custom service type for the waving behavior
+- Implement a service server that simulates the waving motion
+- Create a service client that calls the service
+- Add error handling for invalid requests
+
+**Success Criteria**:
+- [ ] Custom service definition created
+- [ ] Service server implemented and functional
+- [ ] Service client successfully communicates
+- [ ] Proper error handling and validation
+
+### Exercise 3.3: Action Implementation
+
+**Objective**: Implement an action for a complex humanoid robot behavior.
+
+**Task**: Create an action that handles walking to a specific pose with feedback and cancellation.
+
+**Requirements**:
+- Define a custom action type for walking behavior
+- Implement an action server that provides progress feedback
+- Create an action client that monitors progress
+- Include cancellation capability
+- Simulate walking with realistic timing
+
+**Success Criteria**:
+- [ ] Custom action definition created
+- [ ] Action server provides meaningful feedback
+- [ ] Action client properly handles feedback and results
+- [ ] Cancellation functionality works correctly
+
+## Chapter 4: URDF Modeling - Exercises
+
+### Exercise 4.1: URDF Design for Humanoid Robot
+
+**Objective**: Design a complete URDF model for a humanoid robot.
+
+**Scenario**: Design a URDF model for a simple humanoid robot with:
+- A torso/base link
+- Head with neck joint
+- Two arms with shoulder and elbow joints
+- Two legs with hip and knee joints
+- Appropriate physical properties
+
+**Task**: Create a complete URDF file that models this humanoid robot, including:
+- Proper joint types and limits
+- Visual and collision properties
+- Realistic inertial properties
+- Use Xacro macros to avoid repetition
+
+**Success Criteria**:
+- [ ] URDF file is syntactically correct
+- [ ] All required links and joints are present
+- [ ] Physical properties are realistic for a humanoid
+- [ ] Xacro macros reduce repetition appropriately
+
+### Exercise 4.2: URDF Validation
+
+**Objective**: Validate and debug a URDF model.
+
+**Task**: Use the URDF validation techniques learned in the course to validate a provided (or self-created) URDF model and identify potential issues.
+
+**Requirements**:
+- Load the URDF programmatically
+- Check for common issues (missing properties, invalid limits, etc.)
+- Validate kinematic structure
+- Document any issues found and suggest fixes
+
+**Success Criteria**:
+- [ ] URDF loaded successfully
+- [ ] Common issues identified and documented
+- [ ] Validation checks implemented
+- [ ] Suggestions for fixes provided
+
+## Chapter 5: System Integration - Exercises
+
+### Exercise 5.1: System Architecture Design
+
+**Objective**: Design a complete system architecture for a humanoid robot.
+
+**Scenario**: You're tasked with designing the software architecture for a humanoid robot that needs to:
+- Walk to specified locations
+- Manipulate objects
+- Respond to voice commands
+- Navigate around obstacles
+- Maintain balance
+
+**Task**: Design a system architecture that integrates all these capabilities, considering:
+- Which components should be separate nodes
+- How they should communicate (topics, services, actions)
+- What parameters each component needs
+- How to handle system startup and shutdown
+- Safety considerations for each subsystem
+
+**Success Criteria**:
+- [ ] Clear separation of concerns with appropriate modularity
+- [ ] Proper communication patterns for each interaction
+- [ ] Comprehensive parameter management
+- [ ] Safety systems integrated throughout
+
+### Exercise 5.2: Launch File Configuration
+
+**Objective**: Create a launch file for the complete humanoid robot system.
+
+**Task**: Create a ROS 2 launch file that starts multiple coordinated nodes for a humanoid robot system, including:
+- Robot state publisher
+- Joint state publisher
+- Sensor drivers
+- Control nodes
+- High-level behavior manager
+- Appropriate parameter configuration
+
+**Success Criteria**:
+- [ ] Launch file starts all required nodes
+- [ ] Proper parameter configuration for each node
+- [ ] Correct node dependencies and startup order
+- [ ] Clean, well-organized launch file structure
+
+### Exercise 5.3: Parameter Management
+
+**Objective**: Implement dynamic parameter management for robot configuration.
+
+**Task**: Create a node that demonstrates parameter management with:
+- Multiple parameter types (int, float, bool, string arrays)
+- Dynamic reconfiguration capability
+- Parameter validation
+- Runtime parameter changes
+
+**Success Criteria**:
+- [ ] Multiple parameter types properly declared
+- [ ] Dynamic reconfiguration works correctly
+- [ ] Parameter validation implemented
+- [ ] Runtime changes handled appropriately
+
+## Self-Assessment Questions
+
+### ROS 2 Fundamentals
+1. What is the main difference between a ROS 2 topic and a service?
+2. When should you use an action instead of a service in ROS 2?
+3. How does ROS 2's node architecture benefit humanoid robot development?
+
+### Communication Patterns
+4. What are the three essential elements that each URDF link should have?
+5. What is the difference between a revolute and continuous joint in URDF?
+6. Why is Xacro useful for humanoid robot models?
+
+### System Integration
+7. What are the main benefits of using launch files in robotic systems?
+8. How do you handle system-wide parameter changes during runtime?
+9. What is the role of a behavior manager in a humanoid robot system?
+
+### Safety and Best Practices
+10. What are the key components of a multi-layer safety system for humanoid robots?
+11. How do Quality of Service (QoS) settings affect robot communication?
+12. What are common mistakes to avoid when designing robot system architecture?
+
+## Practical Implementation Challenge
+
+### Challenge 1: Complete Robot Node
+**Objective**: Create a complete humanoid robot node that integrates multiple concepts.
+
+**Task**: Develop a single node that:
+- Subscribes to sensor data (IMU, joint states)
+- Publishes control commands (joint positions)
+- Provides a service for requesting robot status
+- Implements an action for performing a walking sequence
+- Uses parameters for configuration
+- Includes safety checks and emergency procedures
+
+**Success Criteria**:
+- [ ] All communication patterns implemented correctly
+- [ ] Safety checks properly integrated
+- [ ] Parameter management working
+- [ ] Clean, well-documented code
+- [ ] Proper error handling throughout
+
+### Challenge 2: System Integration
+**Objective**: Integrate multiple nodes into a cohesive humanoid robot system.
+
+**Task**: Create a complete system with:
+- At least 5 coordinated nodes
+- Proper launch file for system startup
+- Comprehensive parameter configuration
+- System-wide safety monitoring
+- Integration testing between components
+
+**Success Criteria**:
+- [ ] All nodes communicate properly
+- [ ] Launch system works correctly
+- [ ] Parameters configured appropriately
+- [ ] Safety system integrated
+- [ ] System tested and validated
+
+## Learning Checkpoints
+
+### Checkpoint 1: ROS 2 Fundamentals
+- [ ] Can explain the role of ROS 2 in humanoid robotics
+- [ ] Understand the difference between nodes, topics, services, and actions
+- [ ] Can identify appropriate use cases for each communication pattern
+
+### Checkpoint 2: Communication Implementation
+- [ ] Can create publisher and subscriber nodes
+- [ ] Understand Quality of Service (QoS) settings and their impact
+- [ ] Can implement service and action servers and clients
+
+### Checkpoint 3: Robot Modeling
+- [ ] Can create valid URDF models for humanoid robots
+- [ ] Understand the components of a URDF file (links, joints, properties)
+- [ ] Can use Xacro to simplify complex robot models
+
+### Checkpoint 4: System Integration
+- [ ] Can design system architectures for complex robot systems
+- [ ] Understand launch files and parameter management
+- [ ] Can implement safety systems and monitoring
+
+### Checkpoint 5: Practical Application
+- [ ] Can implement complete robot nodes integrating multiple concepts
+- [ ] Can troubleshoot common ROS 2 issues
+- [ ] Understand best practices for robot software development
+
+## Resources and Further Learning
+
+### Official Documentation
+- [ROS 2 Documentation](https://docs.ros.org/en/humble/)
+- [ROS 2 Tutorials](https://docs.ros.org/en/humble/Tutorials.html)
+- [URDF/XML Format](http://wiki.ros.org/urdf/XML)
+
+### Practice Environments
+- ROS 2 Humble Hawksbill installation
+- Gazebo simulation environment
+- Robot simulation packages (ros_gz, gazebo_ros_pkgs)
+
+### Advanced Topics to Explore
+- Real-time control systems
+- Robot calibration procedures
+- Advanced perception algorithms
+- Motion planning and trajectory generation
+- Human-robot interaction systems
+
+## Summary
+
+Completing these exercises and checkpoints will demonstrate a comprehensive understanding of ROS 2 fundamentals as applied to humanoid robotics. The exercises progress from basic concepts to complex system integration, providing a solid foundation for advanced robot development.
+
+Remember to validate your solutions, test your implementations, and follow ROS 2 best practices throughout your development process. The concepts learned in this module form the foundation for all subsequent modules in this textbook.

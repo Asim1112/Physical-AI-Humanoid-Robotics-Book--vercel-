@@ -1,0 +1,615 @@
+# Edge Deployment for Humanoid Robots
+
+## Overview
+
+Deploying your humanoid robot system on edge devices (Jetson, RPi, embedded systems) requires optimization for resource-constrained environments. This guide covers model optimization, system configuration, and deployment strategies for production-ready humanoid robots.
+
+## Target Platforms
+
+### NVIDIA Jetson Family
+- **Jetson AGX Orin**: 275 TOPS AI, 64GB RAM (recommended for VLA)
+- **Jetson Orin NX**: 100 TOPS AI, 16GB RAM (good balance)
+- **Jetson Orin Nano**: 40 TOPS AI, 8GB RAM (budget option)
+- **Jetson Xavier NX**: 21 TOPS AI, 8GB RAM (previous gen)
+
+### Raspberry Pi
+- **Raspberry Pi 5**: 8GB RAM (basic perception)
+- **Raspberry Pi 4**: 8GB RAM (limited AI capabilities)
+
+### Industrial Computers
+- **Intel NUC with dGPU**: Flexible, powerful
+- **Custom x86 with NVIDIA GPU**: Maximum performance
+
+## Pre-Deployment Checklist
+
+- [ ] All components tested in simulation
+- [ ] Performance profiling completed
+- [ ] Models optimized for inference
+- [ ] Safety mechanisms validated
+- [ ] Documentation complete
+- [ ] Backup and recovery procedures in place
+- [ ] Monitoring and logging configured
+
+## Model Optimization
+
+### 1. TensorRT Optimization
+
+Convert PyTorch models to TensorRT for maximum performance:
+
+```python
+# optimize_models.py
+import torch
+import torch_tensorrt
+from pathlib import Path
+
+def optimize_vla_model():
+    """Optimize VLA model for Jetson deployment."""
+
+    # Load PyTorch model
+    model = torch.jit.load('models/vla_model.pt')
+    model.eval()
+
+    # Define input specifications for Jetson
+    inputs = [
+        torch_tensorrt.Input(
+            min_shape=[1, 3, 224, 224],
+            opt_shape=[1, 3, 224, 224],
+            max_shape=[1, 3, 224, 224],
+            dtype=torch.float32
+        ),
+        torch_tensorrt.Input(
+            min_shape=[1, 64],
+            opt_shape=[1, 64],
+            max_shape=[1, 64],
+            dtype=torch.float32
+        )
+    ]
+
+    # Compile with TensorRT
+    trt_model = torch_tensorrt.compile(
+        model,
+        inputs=inputs,
+        enabled_precisions={torch.float16},  # FP16 for Jetson
+        workspace_size=1 << 30,  # 1GB workspace
+        truncate_long_and_double=True
+    )
+
+    # Save optimized model
+    torch.jit.save(trt_model, 'models/vla_model_trt.pt')
+    print("VLA model optimized for TensorRT")
+
+def optimize_object_detector():
+    """Optimize YOLOv8 for edge deployment."""
+    from ultralytics import YOLO
+
+    # Load model
+    model = YOLO('yolov8n.pt')  # Use nano version for edge
+
+    # Export to TensorRT
+    model.export(
+        format='engine',
+        device=0,
+        half=True,  # FP16
+        workspace=4,  # 4GB
+        simplify=True
+    )
+    print("Object detector optimized for TensorRT")
+
+if __name__ == '__main__':
+    optimize_vla_model()
+    optimize_object_detector()
+```
+
+### 2. Model Quantization
+
+Reduce model size and improve inference speed:
+
+```python
+# quantize_models.py
+import torch
+from torch.quantization import quantize_dynamic
+
+def quantize_language_model():
+    """Quantize BERT model to INT8."""
+
+    model = torch.jit.load('models/language_encoder.pt')
+
+    # Dynamic quantization (for LSTM/Linear layers)
+    quantized_model = quantize_dynamic(
+        model,
+        {torch.nn.Linear},
+        dtype=torch.qint8
+    )
+
+    # Save quantized model
+    torch.jit.save(quantized_model, 'models/language_encoder_int8.pt')
+
+    # Compare sizes
+    original_size = Path('models/language_encoder.pt').stat().st_size / 1024**2
+    quantized_size = Path('models/language_encoder_int8.pt').stat().st_size / 1024**2
+
+    print(f"Original: {original_size:.1f} MB")
+    print(f"Quantized: {quantized_size:.1f} MB")
+    print(f"Reduction: {(1 - quantized_size/original_size)*100:.1f}%")
+```
+
+### 3. Model Pruning
+
+Remove redundant parameters:
+
+```python
+# prune_models.py
+import torch
+import torch.nn.utils.prune as prune
+
+def prune_vla_model(model, amount=0.3):
+    """
+    Prune VLA model by removing least important weights.
+
+    Args:
+        model: PyTorch model
+        amount: Fraction of weights to prune (0.3 = 30%)
+    """
+
+    # Prune each linear layer
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            prune.l1_unstructured(module, name='weight', amount=amount)
+            # Make pruning permanent
+            prune.remove(module, 'weight')
+
+    return model
+```
+
+## System Configuration for Jetson
+
+### 1. Power Mode Configuration
+
+Maximize performance on Jetson:
+
+```bash
+# Set maximum performance mode
+sudo nvpmodel -m 0
+sudo jetson_clocks
+
+# Verify settings
+sudo nvpmodel -q
+```
+
+### 2. Docker Deployment
+
+Create Docker container for consistent deployment:
+
+```dockerfile
+# Dockerfile
+FROM nvcr.io/nvidia/l4t-pytorch:r35.2.1-pth2.0-py3
+
+# Install ROS 2
+RUN apt-get update && apt-get install -y \
+    ros-humble-desktop \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    python3-colcon-common-extensions
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip3 install -r requirements.txt
+
+# Copy application
+COPY humanoid_capstone/ /workspace/humanoid_capstone/
+
+# Build ROS workspace
+WORKDIR /workspace
+RUN . /opt/ros/humble/setup.sh && colcon build
+
+# Entry point
+COPY entrypoint.sh /
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+```
+
+Build and run:
+
+```bash
+# Build Docker image
+docker build -t humanoid-robot:latest .
+
+# Run with GPU support
+docker run --runtime nvidia --network host \
+    -v /dev:/dev --privileged \
+    humanoid-robot:latest
+```
+
+### 3. ROS 2 Configuration for Edge
+
+Optimize ROS 2 for edge deployment:
+
+```yaml
+# config/edge_deployment.yaml
+/**:
+  ros__parameters:
+    # Use intra-process communication
+    use_intra_process_comms: true
+
+    # QoS settings for reliability vs latency
+    qos_overrides:
+      /camera/rgb/image_raw:
+        reliability: best_effort
+        durability: volatile
+        history: keep_last
+        depth: 1
+
+      /joint_states:
+        reliability: reliable
+        durability: volatile
+        history: keep_last
+        depth: 10
+
+    # Reduce update rates for non-critical topics
+    camera_fps: 15  # Reduced from 30
+    slam_update_rate: 5  # Reduced from 10
+    vla_inference_rate: 5  # Reduced from 10
+```
+
+## Resource Monitoring
+
+### 1. System Monitor Node
+
+```python
+# humanoid_capstone/monitoring/system_monitor.py
+import psutil
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float32MultiArray
+
+class SystemMonitor(Node):
+    def __init__(self):
+        super().__init__('system_monitor')
+
+        # Publishers
+        self.stats_pub = self.create_publisher(
+            Float32MultiArray, '/system/stats', 10)
+
+        # Timer (every 5 seconds)
+        self.timer = self.create_timer(5.0, self.publish_stats)
+
+    def publish_stats(self):
+        """Publish system statistics."""
+
+        stats = Float32MultiArray()
+
+        # CPU usage
+        cpu_percent = psutil.cpu_percent(interval=1)
+
+        # Memory usage
+        mem = psutil.virtual_memory()
+        mem_percent = mem.percent
+
+        # GPU stats (NVIDIA)
+        try:
+            import pynvml
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            gpu_util = pynvml.nvmlDeviceGetUtilizationRates(handle).gpu
+            gpu_mem = pynvml.nvmlDeviceGetMemoryInfo(handle).used / 1024**3
+        except:
+            gpu_util = 0
+            gpu_mem = 0
+
+        # Temperature
+        try:
+            temps = psutil.sensors_temperatures()
+            temp = temps['thermal'][0].current if 'thermal' in temps else 0
+        except:
+            temp = 0
+
+        stats.data = [cpu_percent, mem_percent, gpu_util, gpu_mem, temp]
+        self.stats_pub.publish(stats)
+
+        # Log warnings
+        if cpu_percent > 90:
+            self.get_logger().warn(f'High CPU usage: {cpu_percent}%')
+        if mem_percent > 90:
+            self.get_logger().warn(f'High memory usage: {mem_percent}%')
+        if temp > 80:
+            self.get_logger().warn(f'High temperature: {temp}°C')
+```
+
+### 2. Performance Dashboard
+
+```python
+# dashboard/performance_viz.py
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import plotly.graph_objs as go
+import rclpy
+from std_msgs.msg import Float32MultiArray
+
+class PerformanceDashboard:
+    def __init__(self):
+        self.app = dash.Dash(__name__)
+        self.cpu_data = []
+        self.mem_data = []
+        self.gpu_data = []
+
+        self.setup_layout()
+        self.setup_callbacks()
+
+    def setup_layout(self):
+        self.app.layout = html.Div([
+            html.H1('Humanoid Robot Performance Dashboard'),
+
+            dcc.Graph(id='cpu-graph'),
+            dcc.Graph(id='memory-graph'),
+            dcc.Graph(id='gpu-graph'),
+
+            dcc.Interval(id='interval', interval=1000)  # Update every second
+        ])
+
+    def setup_callbacks(self):
+        @self.app.callback(
+            [Output('cpu-graph', 'figure'),
+             Output('memory-graph', 'figure'),
+             Output('gpu-graph', 'figure')],
+            [Input('interval', 'n_intervals')]
+        )
+        def update_graphs(n):
+            # Create figures for CPU, Memory, GPU
+            cpu_fig = go.Figure(data=[go.Scatter(y=self.cpu_data)])
+            mem_fig = go.Figure(data=[go.Scatter(y=self.mem_data)])
+            gpu_fig = go.Figure(data=[go.Scatter(y=self.gpu_data)])
+
+            return cpu_fig, mem_fig, gpu_fig
+
+    def run(self):
+        self.app.run_server(debug=False, host='0.0.0.0', port=8050)
+```
+
+## Deployment Workflow
+
+### 1. Pre-Deployment Testing
+
+```bash
+#!/bin/bash
+# pre_deployment_test.sh
+
+echo "Running pre-deployment tests..."
+
+# Build system
+colcon build --packages-select humanoid_capstone
+
+# Run unit tests
+colcon test --packages-select humanoid_capstone
+
+# Run integration tests
+ros2 launch humanoid_capstone integration_test.launch.py
+
+# Check performance
+ros2 run humanoid_capstone performance_benchmark
+
+# Verify safety systems
+ros2 run humanoid_capstone safety_test
+
+echo "Pre-deployment tests complete!"
+```
+
+### 2. Deployment Script
+
+```bash
+#!/bin/bash
+# deploy_to_jetson.sh
+
+JETSON_IP="192.168.1.100"
+JETSON_USER="nvidia"
+
+echo "Deploying to Jetson at $JETSON_IP..."
+
+# Copy files
+rsync -avz --exclude='build' --exclude='install' \
+    ./ $JETSON_USER@$JETSON_IP:~/humanoid_ws/src/humanoid_capstone/
+
+# SSH and build
+ssh $JETSON_USER@$JETSON_IP << 'EOF'
+    cd ~/humanoid_ws
+    source /opt/ros/humble/setup.bash
+    colcon build --packages-select humanoid_capstone
+    echo "Build complete!"
+EOF
+
+echo "Deployment complete!"
+```
+
+### 3. Auto-Start on Boot
+
+```bash
+# Create systemd service
+sudo nano /etc/systemd/system/humanoid-robot.service
+```
+
+```ini
+# humanoid-robot.service
+[Unit]
+Description=Humanoid Robot System
+After=network.target
+
+[Service]
+Type=simple
+User=nvidia
+WorkingDirectory=/home/nvidia/humanoid_ws
+ExecStart=/bin/bash -c "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch humanoid_capstone full_system.launch.py"
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable service:
+
+```bash
+sudo systemctl enable humanoid-robot.service
+sudo systemctl start humanoid-robot.service
+sudo systemctl status humanoid-robot.service
+```
+
+## Performance Optimization Tips
+
+### 1. Memory Management
+
+```python
+# Optimize memory usage
+import gc
+import torch
+
+# Clear unused memory periodically
+gc.collect()
+torch.cuda.empty_cache()
+
+# Use gradient checkpointing for large models
+model.gradient_checkpointing_enable()
+
+# Limit batch size
+BATCH_SIZE = 1  # Process one at a time on edge
+```
+
+### 2. Inference Optimization
+
+```python
+# Use mixed precision
+from torch.cuda.amp import autocast
+
+@torch.no_grad()
+def optimized_inference(model, inputs):
+    with autocast():
+        outputs = model(inputs)
+    return outputs
+```
+
+### 3. Multi-Threading
+
+```python
+# Use threading for I/O operations
+import threading
+
+def async_image_processing():
+    while running:
+        image = camera.get_frame()
+        processed = process_image(image)
+        queue.put(processed)
+
+# Start image processing in background
+thread = threading.Thread(target=async_image_processing, daemon=True)
+thread.start()
+```
+
+## Troubleshooting Edge Deployment
+
+### Common Issues
+
+**Issue**: Out of memory errors
+```bash
+# Solution: Monitor and optimize
+sudo tegrastats  # For Jetson
+# Reduce batch sizes, use model pruning
+```
+
+**Issue**: Slow inference
+```bash
+# Solution: Use TensorRT, reduce model size
+# Verify GPU utilization
+nvidia-smi
+```
+
+**Issue**: ROS 2 nodes crashing
+```bash
+# Solution: Check logs
+journalctl -u humanoid-robot.service -f
+# Increase memory limits in systemd service
+```
+
+## Production Deployment Checklist
+
+- [ ] **Models Optimized**: All models converted to TensorRT/quantized
+- [ ] **Performance Validated**: Meets real-time requirements
+- [ ] **Safety Tested**: Emergency stop, joint limits verified
+- [ ] **Monitoring Configured**: System metrics logged
+- [ ] **Auto-Start Enabled**: System starts on boot
+- [ ] **Backup Strategy**: Regular backups configured
+- [ ] **Update Procedure**: OTA update mechanism in place
+- [ ] **Documentation**: Deployment guide complete
+- [ ] **User Training**: Operators trained on system
+- [ ] **Maintenance Plan**: Regular maintenance scheduled
+
+## Remote Management
+
+### SSH Configuration
+
+```bash
+# Enable SSH on Jetson
+sudo systemctl enable ssh
+sudo systemctl start ssh
+
+# Set up SSH keys for passwordless access
+ssh-copy-id nvidia@jetson-ip
+```
+
+### Remote Monitoring
+
+```bash
+# Monitor system remotely
+ssh nvidia@jetson-ip "sudo tegrastats"
+
+# View logs remotely
+ssh nvidia@jetson-ip "journalctl -u humanoid-robot -f"
+
+# Remote restart
+ssh nvidia@jetson-ip "sudo systemctl restart humanoid-robot"
+```
+
+## Over-The-Air (OTA) Updates
+
+```python
+# ota_updater.py
+import subprocess
+import rclpy
+from rclpy.node import Node
+
+class OTAUpdater(Node):
+    def __init__(self):
+        super().__init__('ota_updater')
+
+    def check_for_updates(self):
+        """Check GitHub for new releases."""
+        # Implementation
+        pass
+
+    def download_update(self, version):
+        """Download update package."""
+        # Implementation
+        pass
+
+    def apply_update(self):
+        """Apply update and restart system."""
+        # Stop current system
+        subprocess.run(['sudo', 'systemctl', 'stop', 'humanoid-robot'])
+
+        # Apply update
+        subprocess.run(['colcon', 'build'])
+
+        # Restart system
+        subprocess.run(['sudo', 'systemctl', 'start', 'humanoid-robot'])
+```
+
+## Best Practices
+
+1. **Test Extensively**: Test on target hardware before deployment
+2. **Monitor Continuously**: Track performance metrics in production
+3. **Update Gradually**: Roll out updates to test units first
+4. **Maintain Backups**: Keep working versions backed up
+5. **Document Everything**: Maintain deployment documentation
+6. **Plan for Failure**: Have recovery procedures ready
+7. **Optimize Iteratively**: Continuously improve performance
+8. **Secure System**: Implement proper security measures
+
+Successful edge deployment requires careful optimization, thorough testing, and continuous monitoring to ensure reliable operation of your humanoid robot system!

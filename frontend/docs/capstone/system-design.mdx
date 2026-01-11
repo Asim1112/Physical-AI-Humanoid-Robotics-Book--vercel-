@@ -1,0 +1,601 @@
+# Capstone System Design
+
+## Overview
+
+This chapter guides you through designing the system architecture for your capstone humanoid robot project. A well-designed architecture is crucial for creating a maintainable, scalable, and robust system that integrates perception, planning, and control.
+
+## System Architecture Principles
+
+### 1. Modularity
+Design independent, reusable components with clear interfaces:
+- Separate concerns (perception, planning, control)
+- Use ROS 2 nodes for component isolation
+- Define clear message interfaces between modules
+
+### 2. Scalability
+Build systems that can grow in capability:
+- Support adding new sensors and actuators
+- Allow integration of new AI models
+- Enable expansion to new tasks
+
+### 3. Reliability
+Ensure robust operation in real-world conditions:
+- Implement error handling and recovery
+- Add redundancy for critical components
+- Monitor system health continuously
+
+### 4. Real-Time Performance
+Meet timing constraints for robot control:
+- Prioritize time-critical components
+- Optimize computation and communication
+- Monitor and enforce latency budgets
+
+## High-Level Architecture
+
+### Layered Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MISSION CONTROL LAYER                         │
+│  • High-level task planning                                     │
+│  • Goal management                                              │
+│  • Human interface                                              │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+┌────────────────────────┴────────────────────────────────────────┐
+│                 COGNITIVE LAYER (VLA)                            │
+│  • Vision-Language-Action processing                            │
+│  • Intent understanding                                         │
+│  • Visual grounding                                             │
+│  • Action planning                                              │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+┌────────────────────────┴────────────────────────────────────────┐
+│              PERCEPTION & MAPPING LAYER                          │
+│  • Visual SLAM                                                   │
+│  • Object detection                                             │
+│  • Scene understanding                                          │
+│  • Map management                                               │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+┌────────────────────────┴────────────────────────────────────────┐
+│              PLANNING & NAVIGATION LAYER                         │
+│  • Path planning                                                │
+│  • Footstep planning                                            │
+│  • Motion planning                                              │
+│  • Collision avoidance                                          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+┌────────────────────────┴────────────────────────────────────────┐
+│                   CONTROL LAYER                                  │
+│  • Balance control                                              │
+│  • Joint control                                                │
+│  • Trajectory tracking                                          │
+│  • Safety monitoring                                            │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+┌────────────────────────┴────────────────────────────────────────┐
+│                 HARDWARE ABSTRACTION LAYER                       │
+│  • Sensor drivers                                               │
+│  • Actuator drivers                                             │
+│  • Communication interfaces                                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Component Design
+
+### 1. Hardware Abstraction Layer
+
+Design interfaces for hardware independence:
+
+```python
+# Example: Hardware abstraction interface
+from abc import ABC, abstractmethod
+
+class RobotHardwareInterface(ABC):
+    """Abstract interface for robot hardware."""
+
+    @abstractmethod
+    def get_joint_states(self):
+        """Get current joint positions and velocities."""
+        pass
+
+    @abstractmethod
+    def send_joint_commands(self, positions):
+        """Send joint position commands."""
+        pass
+
+    @abstractmethod
+    def get_imu_data(self):
+        """Get IMU measurements."""
+        pass
+
+    @abstractmethod
+    def get_camera_image(self):
+        """Get camera image."""
+        pass
+
+    @abstractmethod
+    def emergency_stop(self):
+        """Execute emergency stop."""
+        pass
+
+
+class SimulationHardware(RobotHardwareInterface):
+    """Hardware interface for Gazebo simulation."""
+
+    def __init__(self):
+        # Initialize ROS 2 interfaces for Gazebo
+        pass
+
+    def get_joint_states(self):
+        # Get from Gazebo simulation
+        pass
+
+    # Implement other methods...
+
+
+class PhysicalHardware(RobotHardwareInterface):
+    """Hardware interface for physical robot."""
+
+    def __init__(self):
+        # Initialize drivers for physical hardware
+        pass
+
+    def get_joint_states(self):
+        # Get from actual sensors
+        pass
+
+    # Implement other methods...
+```
+
+### 2. Perception System
+
+Design modular perception pipeline:
+
+```yaml
+# perception_architecture.yaml
+perception_system:
+  components:
+    - name: camera_processing
+      type: sensor_processor
+      inputs:
+        - /camera/rgb/image_raw
+      outputs:
+        - /perception/processed_image
+      parameters:
+        resolution: [640, 480]
+        fps: 30
+
+    - name: object_detection
+      type: ai_inference
+      inputs:
+        - /perception/processed_image
+      outputs:
+        - /perception/detected_objects
+      model:
+        type: yolov8
+        weights: models/object_detector.pt
+        confidence_threshold: 0.5
+
+    - name: visual_slam
+      type: slam
+      inputs:
+        - /camera/rgb/image_raw
+        - /imu/data
+      outputs:
+        - /perception/odometry
+        - /perception/map
+      parameters:
+        map_resolution: 0.05
+        enable_loop_closure: true
+
+    - name: scene_understanding
+      type: semantic_segmentation
+      inputs:
+        - /perception/processed_image
+      outputs:
+        - /perception/semantic_map
+      model:
+        type: segformer
+        weights: models/segmentation.pt
+```
+
+### 3. VLA Integration
+
+Design vision-language-action pipeline:
+
+```python
+# VLA system architecture
+class VLASystem:
+    """Complete VLA system for humanoid robot."""
+
+    def __init__(self, config):
+        # Language processing
+        self.intent_recognizer = IntentRecognizer()
+        self.semantic_parser = SemanticParser()
+
+        # Vision processing
+        self.vision_grounder = VisionGrounder()
+        self.object_detector = ObjectDetector()
+
+        # Multimodal fusion
+        self.multimodal_fusion = MultimodalFusion()
+
+        # Action generation
+        self.action_planner = ActionPlanner()
+        self.motion_generator = MotionGenerator()
+
+        # Integration
+        self.state_machine = TaskStateMachine()
+        self.safety_monitor = SafetyMonitor()
+
+    def process_command(self, text_command, image, robot_state):
+        """Process natural language command."""
+
+        # 1. Understand intent
+        intent = self.intent_recognizer.classify(text_command)
+        parsed_command = self.semantic_parser.parse(text_command)
+
+        # 2. Ground in visual scene
+        grounded_objects = self.vision_grounder.ground(
+            image, parsed_command
+        )
+
+        # 3. Fuse multimodal information
+        fused_representation = self.multimodal_fusion.fuse(
+            vision=grounded_objects,
+            language=parsed_command,
+            proprio=robot_state
+        )
+
+        # 4. Generate action plan
+        action_sequence = self.action_planner.plan(
+            intent, fused_representation
+        )
+
+        # 5. Generate motion
+        trajectories = self.motion_generator.generate(
+            action_sequence, robot_state
+        )
+
+        # 6. Safety check
+        safe_trajectories = self.safety_monitor.validate(
+            trajectories, robot_state
+        )
+
+        return safe_trajectories
+```
+
+### 4. Navigation System
+
+Design hierarchical navigation architecture:
+
+```
+Navigation System Architecture:
+├── Global Planner
+│   ├── Map representation (occupancy grid)
+│   ├── Path finding (A*, RRT)
+│   └── Waypoint generation
+├── Local Planner
+│   ├── Dynamic obstacle avoidance
+│   ├── Velocity planning
+│   └── Replanning on failure
+├── Footstep Planner
+│   ├── Balance-aware stepping
+│   ├── Terrain adaptation
+│   └── Step sequence generation
+├── Balance Controller
+│   ├── ZMP control
+│   ├── CoM management
+│   └── Stabilization
+└── Motion Executor
+    ├── Trajectory tracking
+    ├── Joint control
+    └── Feedback control
+```
+
+## Data Flow Design
+
+### Message Flow Diagram
+
+```
+Sensors → Perception → Cognitive → Planning → Control → Actuators
+   │          │           │           │          │          │
+   │          ↓           ↓           ↓          ↓          │
+   │      [Object     [Intent     [Path      [Balance      │
+   │       Detection]  Recognition] Planning]  Control]     │
+   │          │           │           │          │          │
+   │          ↓           ↓           ↓          ↓          │
+   └──────→ State Estimation ←─── Feedback ←────┘          │
+                 │                                           │
+                 └───────→ Safety Monitor ←─────────────────┘
+```
+
+### ROS 2 Topic Structure
+
+```yaml
+# Topic organization for capstone system
+topics:
+  # Sensors (raw data)
+  sensors:
+    - /camera/rgb/image_raw
+    - /camera/depth/image_raw
+    - /imu/data
+    - /joint_states
+    - /force_torque/left_foot
+    - /force_torque/right_foot
+
+  # Perception (processed information)
+  perception:
+    - /perception/objects
+    - /perception/semantic_map
+    - /perception/odometry
+    - /perception/point_cloud
+
+  # VLA (cognitive processing)
+  vla:
+    - /vla/command (String)
+    - /vla/intent (Intent)
+    - /vla/grounded_objects (ObjectArray)
+    - /vla/action_plan (ActionSequence)
+
+  # Navigation
+  navigation:
+    - /navigation/global_plan (Path)
+    - /navigation/local_plan (Path)
+    - /navigation/footsteps (FootstepArray)
+    - /navigation/goal (PoseStamped)
+
+  # Control
+  control:
+    - /control/joint_commands (JointTrajectory)
+    - /control/balance_state (BalanceState)
+    - /control/emergency_stop (Bool)
+
+  # System
+  system:
+    - /diagnostics
+    - /system/status
+    - /safety/violations
+```
+
+## State Machine Design
+
+### High-Level Task State Machine
+
+```python
+from enum import Enum
+from transitions import Machine
+
+class RobotState(Enum):
+    IDLE = "idle"
+    PROCESSING_COMMAND = "processing_command"
+    NAVIGATING = "navigating"
+    MANIPULATING = "manipulating"
+    RECOVERING = "recovering"
+    EMERGENCY_STOP = "emergency_stop"
+
+class TaskStateMachine:
+    """State machine for high-level task control."""
+
+    states = [s.value for s in RobotState]
+
+    transitions = [
+        # From IDLE
+        {'trigger': 'receive_command', 'source': 'idle',
+         'dest': 'processing_command'},
+
+        # From PROCESSING_COMMAND
+        {'trigger': 'navigate_required', 'source': 'processing_command',
+         'dest': 'navigating'},
+        {'trigger': 'manipulate_required', 'source': 'processing_command',
+         'dest': 'manipulating'},
+
+        # From NAVIGATING
+        {'trigger': 'navigation_complete', 'source': 'navigating',
+         'dest': 'manipulating'},
+        {'trigger': 'navigation_failed', 'source': 'navigating',
+         'dest': 'recovering'},
+        {'trigger': 'goal_reached', 'source': 'navigating',
+         'dest': 'idle'},
+
+        # From MANIPULATING
+        {'trigger': 'manipulation_complete', 'source': 'manipulating',
+         'dest': 'idle'},
+        {'trigger': 'manipulation_failed', 'source': 'manipulating',
+         'dest': 'recovering'},
+
+        # From RECOVERING
+        {'trigger': 'recovery_success', 'source': 'recovering',
+         'dest': 'idle'},
+        {'trigger': 'recovery_failed', 'source': 'recovering',
+         'dest': 'emergency_stop'},
+
+        # Emergency stop (from any state)
+        {'trigger': 'emergency', 'source': '*',
+         'dest': 'emergency_stop'},
+
+        # Reset from emergency
+        {'trigger': 'reset', 'source': 'emergency_stop',
+         'dest': 'idle'}
+    ]
+
+    def __init__(self):
+        self.machine = Machine(
+            model=self,
+            states=TaskStateMachine.states,
+            transitions=TaskStateMachine.transitions,
+            initial='idle'
+        )
+
+    def on_enter_processing_command(self):
+        """Actions when entering processing_command state."""
+        print("Processing new command...")
+
+    def on_enter_navigating(self):
+        """Actions when entering navigating state."""
+        print("Starting navigation...")
+
+    # ... other state entry/exit handlers
+```
+
+## Performance Budgets
+
+### Latency Budget
+
+```yaml
+# Latency requirements for real-time operation
+latency_budgets:
+  perception:
+    camera_processing: 33ms  # 30 FPS
+    object_detection: 50ms
+    slam_update: 100ms
+
+  vla:
+    intent_recognition: 100ms
+    vision_grounding: 150ms
+    action_planning: 200ms
+
+  control:
+    balance_control: 10ms   # 100 Hz
+    joint_control: 5ms      # 200 Hz
+    safety_check: 5ms
+
+  total_command_to_action: 500ms  # Maximum acceptable delay
+```
+
+### Computational Budget
+
+```yaml
+# Resource allocation for Jetson AGX Orin (64GB)
+compute_budget:
+  gpu:
+    vla_inference: 40%
+    object_detection: 30%
+    slam: 20%
+    other: 10%
+
+  cpu:
+    control: 30%
+    planning: 25%
+    communication: 20%
+    monitoring: 15%
+    other: 10%
+
+  memory:
+    vla_model: 8GB
+    slam_map: 4GB
+    perception_buffers: 2GB
+    system: 2GB
+    reserve: 4GB
+```
+
+## Safety Architecture
+
+### Safety Layers
+
+```
+Safety Layer 1: Hardware Emergency Stop
+  ├── Physical e-stop button
+  ├── Motor power cutoff
+  └── Brake engagement
+
+Safety Layer 2: Control-Level Safety
+  ├── Joint limit enforcement
+  ├── Velocity limits
+  ├── Torque limits
+  └── Collision detection
+
+Safety Layer 3: Planning-Level Safety
+  ├── Workspace boundaries
+  ├── Balance verification
+  ├── Path safety checking
+  └── Obstacle avoidance
+
+Safety Layer 4: Cognitive-Level Safety
+  ├── Command validation
+  ├── Intent verification
+  ├── Action feasibility check
+  └── Human approval for risky actions
+
+Safety Layer 5: System-Level Monitoring
+  ├── Watchdog timers
+  ├── Health monitoring
+  ├── Error detection
+  └── Graceful degradation
+```
+
+## Configuration Management
+
+### Configuration Hierarchy
+
+```yaml
+# Master configuration file
+robot_config:
+  hardware:
+    platform: "simulation"  # or "nao", "pepper", "custom"
+    joints: 12
+    cameras: 2
+    sensors:
+      - type: "imu"
+        topic: "/imu/data"
+      - type: "camera"
+        topic: "/camera/rgb/image_raw"
+
+  perception:
+    slam:
+      enable: true
+      config: "config/slam_config.yaml"
+    object_detection:
+      enable: true
+      model: "models/yolov8n.pt"
+      confidence: 0.5
+
+  vla:
+    enable: true
+    model_path: "models/vla_model.pt"
+    optimization: "tensorrt"
+    precision: "fp16"
+
+  navigation:
+    planner: "rrt_star"
+    local_planner: "dwa"
+    footstep_planner: "balance_aware"
+
+  control:
+    balance_controller: "zmp"
+    joint_controller: "position"
+    control_frequency: 100
+
+  safety:
+    enable_all_checks: true
+    emergency_stop_enabled: true
+    workspace_limits:
+      x: [-1.0, 1.0]
+      y: [-1.0, 1.0]
+      z: [0.0, 2.0]
+```
+
+## Design Checklist
+
+Before finalizing your design, verify:
+
+- [ ] All required capabilities are addressed
+- [ ] Component interfaces are well-defined
+- [ ] ROS 2 topics and services are organized logically
+- [ ] Latency budgets are realistic and achievable
+- [ ] Computational resources are allocated appropriately
+- [ ] Safety mechanisms are comprehensive
+- [ ] State transitions are clearly defined
+- [ ] Configuration is externalized and manageable
+- [ ] System can be tested incrementally
+- [ ] Design supports future extensions
+
+## Next Steps
+
+With your system design complete, proceed to:
+- **Implementation Guide**: Build your system step-by-step
+- **Edge Deployment**: Optimize and deploy to hardware
+
+A well-thought-out design is the foundation of a successful capstone project!

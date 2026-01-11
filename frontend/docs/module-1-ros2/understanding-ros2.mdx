@@ -1,0 +1,413 @@
+---
+title: "Understanding ROS 2"
+description: "Learn the fundamental concepts of ROS 2 architecture and its role in humanoid robotics"
+tags: [ros2, architecture, nodes, topics]
+sidebar_label: "Understanding ROS 2"
+sidebar_position: 2
+keywords: [ros2, robot operating system, middleware, architecture]
+toc_min_heading_level: 2
+toc_max_heading_level: 4
+---
+
+# Understanding ROS 2
+
+import TOCInline from '@theme/TOCInline';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<TOCInline toc={toc} />
+
+## Overview
+
+This chapter introduces the fundamental concepts of ROS 2 (Robot Operating System 2) and explains why it serves as the "nervous system" for humanoid robots. You'll learn about the core architectural components and how they enable complex robotic systems to function cohesively.
+
+### Learning Objectives
+
+- Understand the core architectural concepts of ROS 2
+- Recognize the role of nodes, topics, services, and actions in robotic systems
+- Identify when to use different communication patterns
+- Appreciate ROS 2's role in humanoid robot development
+
+### Prerequisites
+
+- Basic understanding of computer networking concepts
+- Familiarity with Python programming concepts
+
+## Deep Explanation
+
+### What is ROS 2?
+
+ROS 2 (Robot Operating System 2) is not an operating system but rather a flexible framework for writing robot software. It's a collection of tools, libraries, and conventions that aim to simplify the task of creating complex and robust robot behavior across a wide variety of robot platforms.
+
+For humanoid robotics, ROS 2 provides:
+
+- **Communication infrastructure**: Enables different software components to exchange information
+- **Hardware abstraction**: Allows the same algorithms to work with different physical robots
+- **Device drivers**: Connects to various sensors and actuators
+- **Visualization tools**: Helps developers understand robot state and behavior
+- **Package management**: Organizes and shares robot software
+
+### Core Concepts
+
+#### Nodes
+
+A **node** is a process that performs computation in a robot system. Nodes are the fundamental building blocks of a ROS 2 system. Each node typically handles a specific task such as sensor data processing, motion control, or user interface.
+
+In humanoid robotics, you might have nodes for:
+- Processing camera images for perception
+- Reading IMU data for balance control
+- Planning walking gaits
+- Controlling joint motors
+- Handling user commands
+
+#### Topics and Message Passing
+
+**Topics** provide a way for nodes to send and receive data in a one-way, many-to-many fashion. This follows a publish-subscribe pattern where nodes publish messages to topics and other nodes subscribe to those topics to receive the messages.
+
+For a humanoid robot, common topics might include:
+- `/camera/image_raw` - Raw images from cameras
+- `/imu/data` - Inertial measurement unit readings
+- `/joint_states` - Current positions of all joints
+- `/cmd_vel` - Velocity commands for navigation
+
+#### Services
+
+**Services** provide a request-response communication pattern. A client sends a request to a server, and the server sends back a response. This is synchronous and follows a one-to-one pattern.
+
+Service examples in humanoid robotics:
+- `/get_robot_state` - Request current robot state
+- `/set_torque_enabled` - Enable/disable joint torque
+- `/load_map` - Load a navigation map
+
+#### Actions
+
+**Actions** are for long-running tasks that require feedback and the ability to cancel. They combine the features of topics (for feedback) and services (for goals and results).
+
+Action examples for humanoid robots:
+- `/navigate_to_pose` - Navigate to a specific location
+- `/pick_object` - Pick up an object with detailed feedback
+- `/walk_to` - Walk to a location with step-by-step feedback
+
+### Architecture Benefits for Humanoid Robotics
+
+ROS 2's architecture provides several key benefits for humanoid robot development:
+
+1. **Modularity**: Different teams can work on perception, control, and planning independently
+2. **Reusability**: Components developed for one robot can be adapted for others
+3. **Robustness**: Failure in one node doesn't necessarily bring down the entire system
+4. **Debugging**: Tools to introspect and visualize the system state
+5. **Simulation**: Easy integration with simulation environments for safe testing
+
+## Practical Examples
+
+### Example 1: Basic Node Structure
+
+<Tabs>
+<TabItem value="code" label="Python Code" default>
+
+```python
+#!/usr/bin/env python3
+# Example: Basic ROS 2 node for humanoid robot status monitoring
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from sensor_msgs.msg import JointState
+
+
+class RobotStatusMonitor(Node):
+    """
+    A simple node that monitors robot status and publishes alerts.
+    This demonstrates basic node structure with subscribers and publishers.
+    """
+
+    def __init__(self):
+        super().__init__('robot_status_monitor')
+
+        # Create subscriber to joint states
+        self.subscription = self.create_subscription(
+            JointState,
+            'joint_states',
+            self.joint_states_callback,
+            10  # QoS history depth
+        )
+
+        # Create publisher for status alerts
+        self.publisher = self.create_publisher(
+            String,
+            'robot_status_alerts',
+            10
+        )
+
+        # Timer for periodic status checks
+        self.timer = self.create_timer(1.0, self.status_check_callback)
+
+        self.get_logger().info('Robot Status Monitor node initialized')
+
+    def joint_states_callback(self, msg):
+        """Handle incoming joint state messages."""
+        # Process joint positions, velocities, efforts
+        self.get_logger().debug(f'Received joint states for {len(msg.name)} joints')
+
+    def status_check_callback(self):
+        """Periodic status check function."""
+        # Perform any periodic status checks here
+        status_msg = String()
+        status_msg.data = 'Robot status: Nominal'
+        self.publisher.publish(status_msg)
+
+
+def main(args=None):
+    """Main function to run the robot status monitor node."""
+    rclpy.init(args=args)
+
+    robot_monitor = RobotStatusMonitor()
+
+    try:
+        rclpy.spin(robot_monitor)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        robot_monitor.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="explanation" label="Explanation">
+
+**Node Structure Explanation:**
+- The `RobotStatusMonitor` class extends `Node` to create a ROS 2 node
+- The constructor initializes subscribers, publishers, and timers
+- The `joint_states_callback` processes incoming joint state messages
+- The `status_check_callback` runs periodically to perform checks
+- The `main` function initializes ROS 2, creates the node, and starts spinning
+
+**Key Concepts Demonstrated:**
+- Node inheritance and initialization
+- Subscriber creation for receiving messages
+- Publisher creation for sending messages
+- Timer for periodic tasks
+- Proper cleanup in the main function
+
+**Expected:**
+- Node initializes and starts listening for joint states
+- Publishes status messages every second
+- Gracefully handles shutdown when interrupted
+
+</TabItem>
+</Tabs>
+
+### Example 2: Publisher-Subscriber Pattern
+
+<Tabs>
+<TabItem value="publisher" label="Publisher Code">
+
+```python
+#!/usr/bin/env python3
+# Example: Simple publisher for humanoid robot joint commands
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
+
+
+class JointCommandPublisher(Node):
+    """Publishes joint commands to control humanoid robot joints."""
+
+    def __init__(self):
+        super().__init__('joint_command_publisher')
+
+        # Create publisher for joint commands
+        self.publisher = self.create_publisher(
+            Float64MultiArray,
+            '/joint_group_position_controller/commands',
+            10
+        )
+
+        # Timer to send commands periodically
+        self.timer = self.create_timer(0.1, self.publish_joint_commands)  # 10Hz
+
+        self.command_index = 0
+        self.get_logger().info('Joint Command Publisher node initialized')
+
+    def publish_joint_commands(self):
+        """Publish joint position commands."""
+        msg = Float64MultiArray()
+
+        # Create a simple oscillating pattern for demonstration
+        import math
+        import time
+
+        t = time.time()
+        # Example: 6 joint positions oscillating at different frequencies
+        positions = [
+            0.5 * math.sin(t * 0.5),      # Joint 1
+            0.3 * math.sin(t * 0.7),      # Joint 2
+            0.4 * math.sin(t * 0.3),      # Joint 3
+            0.6 * math.sin(t * 0.9),      # Joint 4
+            0.2 * math.sin(t * 1.1),      # Joint 5
+            0.7 * math.sin(t * 0.4),      # Joint 6
+        ]
+
+        msg.data = positions
+        self.publisher.publish(msg)
+
+        self.get_logger().info(f'Published joint commands: {positions}')
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    publisher = JointCommandPublisher()
+
+    try:
+        rclpy.spin(publisher)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        publisher.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+<TabItem value="subscriber" label="Subscriber Code">
+
+```python
+#!/usr/bin/env python3
+# Example: Simple subscriber that receives and processes joint commands
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float64MultiArray
+
+
+class JointCommandSubscriber(Node):
+    """Subscribes to joint commands and processes them."""
+
+    def __init__(self):
+        super().__init__('joint_command_subscriber')
+
+        # Create subscriber for joint commands
+        self.subscription = self.create_subscription(
+            Float64MultiArray,
+            '/joint_group_position_controller/commands',
+            self.joint_command_callback,
+            10
+        )
+
+        self.get_logger().info('Joint Command Subscriber node initialized')
+
+    def joint_command_callback(self, msg):
+        """Process incoming joint commands."""
+        # In a real robot, this would send commands to the actual joints
+        joint_positions = list(msg.data)
+
+        self.get_logger().info(f'Received joint positions: {joint_positions}')
+
+        # Validate and process commands
+        if len(joint_positions) == 6:
+            self.get_logger().info('Valid 6-DOF joint command received')
+        else:
+            self.get_logger().warn(f'Unexpected number of joints: {len(joint_positions)}')
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    subscriber = JointCommandSubscriber()
+
+    try:
+        rclpy.spin(subscriber)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        subscriber.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+</TabItem>
+</Tabs>
+
+## Exercises and Checkpoints
+
+### Exercise 1: Conceptual Understanding
+
+**Scenario:** You're designing a humanoid robot system that needs to process camera images, plan walking steps, and control joint motors.
+
+**Task:** Identify which communication patterns (topics, services, actions) would be most appropriate for each of the following:
+
+1. Sending camera images from the vision system to the perception module
+2. Requesting the robot to move to a specific location
+3. Requesting current joint positions (should return quickly)
+4. Performing a complex manipulation task with feedback on progress
+
+**Success Criteria:**
+- [ ] Correctly identify publish-subscribe (topics) for continuous data
+- [ ] Identify request-response (services) for quick queries
+- [ ] Identify goal-oriented with feedback (actions) for complex tasks
+
+### Exercise 2: Practical Implementation
+
+**Objective:** Create a simple ROS 2 node that publishes the robot's current pose as a topic.
+
+**Steps:**
+1. Create a new Python file `robot_pose_publisher.py`
+2. Implement a node that publishes pose information using appropriate message types
+3. Test the node can be run independently
+
+**Expected Outcome:** A working ROS 2 node that publishes simulated pose data at 10Hz.
+
+### Self-Assessment Questions
+
+1. **Question:** What is the main difference between a ROS 2 topic and a service?
+   **Answer:** Topics provide asynchronous, many-to-many communication through publish-subscribe, while services provide synchronous, one-to-one request-response communication.
+
+2. **Question:** When should you use an action instead of a service in ROS 2?
+   **Answer:** Use actions for long-running tasks that require feedback during execution and the ability to cancel, whereas services are for quick request-response operations.
+
+3. **Question:** How does ROS 2's node architecture benefit humanoid robot development?
+   **Answer:** It enables modularity, allowing different teams to work on perception, control, and planning independently, while providing robust communication between components.
+
+## Summary and Key Takeaways
+
+### Key Concepts Recap
+
+- **Node**: A process that performs computation in a ROS 2 system, typically handling a specific task
+- **Topic**: A named bus for asynchronous, many-to-many communication using publish-subscribe pattern
+- **Service**: Synchronous request-response communication for quick queries and commands
+- **Action**: Goal-oriented communication with feedback and cancellation for long-running tasks
+
+### Practical Applications
+
+- **Architecture**: ROS 2 provides the communication infrastructure for complex humanoid robot systems
+- **Modularity**: Different software components can be developed and tested independently
+- **Simulation**: Same code can run in simulation and on real robots through hardware abstraction
+
+### Next Steps
+
+- **Module Progression:** Next chapter covers [Nodes and Topics](./nodes-topics.mdx) in detail
+- **Further Reading:** Review the official ROS 2 documentation for detailed API references
+- **Practice Opportunities:** Try creating your own simple ROS 2 nodes to practice the concepts
+
+### Common Mistakes and Troubleshooting
+
+- **Mistake 1:** Using services for continuous data streams → **Solution:** Use topics for streaming data
+- **Mistake 2:** Using topics for tasks requiring guaranteed delivery → **Solution:** Use services or actions for critical operations
+- **Mistake 3:** Not considering message frequency → **Solution:** Match publication rate to application needs (e.g., 30Hz for video, 100Hz for control)
+
+### References and Resources
+
+- [Official ROS 2 Documentation](https://docs.ros.org/en/humble/)
+- [ROS 2 Concepts Guide](https://docs.ros.org/en/humble/Concepts.html)
+- [rclpy API Documentation](https://docs.ros2.org/latest/api/rclpy/)
+- [ROS 2 Design Documents](https://design.ros2.org/)

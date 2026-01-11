@@ -1,0 +1,109 @@
+# Controller configuration for simple humanoid robot simulation
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz
+    use_sim_time: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Example joint group controllers for humanoid robot
+    left_leg_controller:
+      type: position_controllers/JointGroupPositionController
+
+    right_leg_controller:
+      type: position_controllers/JointGroupPositionController
+
+    head_controller:
+      type: position_controllers/JointGroupPositionController
+
+# Left leg controller configuration
+left_leg_controller:
+  ros__parameters:
+    joints:
+      - left_hip_joint
+      - left_knee_joint
+      - left_ankle_joint
+
+# Right leg controller configuration
+right_leg_controller:
+  ros__parameters:
+    joints:
+      - right_hip_joint
+      - right_knee_joint
+      - right_ankle_joint
+
+# Head controller configuration
+head_controller:
+  ros__parameters:
+    joints:
+      - neck_joint
+
+# Gazebo simulation parameters
+gazebo:
+  ros__parameters:
+    # Physics parameters
+    physics:
+      type: ode
+      max_step_size: 0.001
+      real_time_factor: 1.0
+      real_time_update_rate: 1000.0
+      gravity: [0.0, 0.0, -9.8]
+
+    # Sensor parameters
+    sensors:
+      camera:
+        update_rate: 30.0
+        image_width: 640
+        image_height: 480
+        fov: 1.047
+        distortion:
+          k1: -0.1
+          k2: 0.02
+          p1: 0.0
+          p2: 0.0
+
+      imu:
+        update_rate: 100.0
+        noise_density: 0.0001
+        random_walk: 0.0001
+
+      lidar:
+        update_rate: 10.0
+        range_min: 0.1
+        range_max: 10.0
+        angle_min: -3.14159
+        angle_max: 3.14159
+        angle_increment: 0.01745  # 1 degree
+
+    # Joint parameters
+    joints:
+      left_hip_joint:
+        friction: 0.1
+        damping: 1.0
+        max_effort: 50.0
+      right_hip_joint:
+        friction: 0.1
+        damping: 1.0
+        max_effort: 50.0
+      left_knee_joint:
+        friction: 0.05
+        damping: 0.8
+        max_effort: 40.0
+      right_knee_joint:
+        friction: 0.05
+        damping: 0.8
+        max_effort: 40.0
+      left_ankle_joint:
+        friction: 0.02
+        damping: 0.5
+        max_effort: 20.0
+      right_ankle_joint:
+        friction: 0.02
+        damping: 0.5
+        max_effort: 20.0
+      neck_joint:
+        friction: 0.01
+        damping: 0.1
+        max_effort: 10.0
